@@ -27,7 +27,7 @@ function validateArticleData(data, isUpdate = false) {
   }
 
   // Optional string validation if provided
-  const optionalFields = ['summary', 'author', 'category', 'image', 'imageUrl', 'status', 'locationId', 'language', 'date', 'time'];
+  const optionalFields = ['summary', 'author', 'category', 'image', 'imageUrl', 'status', 'locationId', 'language', 'date', 'time', 'permalink', 'slug'];
   optionalFields.forEach(field => {
     if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
       if (typeof data[field] !== 'string') {
@@ -63,7 +63,7 @@ router.get('/feed', async (req, res, next) => {
       articles = articles.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
     }
 
-    const { category, locationId, regionId, language, search, limit, page } = req.query;
+    const { category, locationId, regionId, language, search, permalink, slug, limit, page } = req.query;
 
     if (category) {
       articles = articles.filter(a => (a.category || '').toLowerCase() === category.toLowerCase());
@@ -76,6 +76,12 @@ router.get('/feed', async (req, res, next) => {
     }
     if (language) {
       articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
+    }
+    if (permalink) {
+      articles = articles.filter(a => (a.permalink || '').toLowerCase() === permalink.toLowerCase() || (a.slug || '').toLowerCase() === permalink.toLowerCase());
+    }
+    if (slug) {
+      articles = articles.filter(a => (a.slug || '').toLowerCase() === slug.toLowerCase() || (a.permalink || '').toLowerCase() === slug.toLowerCase());
     }
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
@@ -112,7 +118,7 @@ router.get('/feed', async (req, res, next) => {
 router.get('/', async (req, res, next) => {
   try {
     let articles = await articleStore.getAllArticles();
-    const { category, status, locationId, regionId, language, search, limit, page } = req.query;
+    const { category, status, locationId, regionId, language, search, permalink, slug, limit, page } = req.query;
 
     if (category) {
       articles = articles.filter(a => (a.category || '').toLowerCase() === category.toLowerCase());
@@ -128,6 +134,12 @@ router.get('/', async (req, res, next) => {
     }
     if (language) {
       articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
+    }
+    if (permalink) {
+      articles = articles.filter(a => (a.permalink || '').toLowerCase() === permalink.toLowerCase() || (a.slug || '').toLowerCase() === permalink.toLowerCase());
+    }
+    if (slug) {
+      articles = articles.filter(a => (a.slug || '').toLowerCase() === slug.toLowerCase() || (a.permalink || '').toLowerCase() === slug.toLowerCase());
     }
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();

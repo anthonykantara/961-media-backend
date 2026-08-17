@@ -6,6 +6,8 @@
 export interface Post {
   id: string;
   title: string;
+  permalink?: string;
+  slug?: string;
   content: string;
   summary: string;
   author: string;
@@ -28,6 +30,8 @@ export type Article = Post;
 export interface PreviewCard {
   id: string;
   title: string;
+  permalink?: string;
+  slug?: string;
   summary: string;
   image: string;
   imageUrl: string;
@@ -75,6 +79,8 @@ export interface ArticleQuery {
   regionId?: string;
   language?: string;
   search?: string;
+  permalink?: string;
+  slug?: string;
   limit?: string | number;
   page?: string | number;
 }

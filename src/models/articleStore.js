@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const { generatePermalink } = require('../utils/permalink');
 
 const DATA_DIR = path.join(__dirname, '../../data');
 const FILE_PATH = path.join(DATA_DIR, process.env.NODE_ENV === 'test' ? 'articles.test.json' : 'articles.json');
@@ -9,6 +10,8 @@ const DEFAULT_SEED_ARTICLES = [
   {
     id: 'lb-en-1',
     title: "Lebanon's Tech Scene is Booming in 2026",
+    permalink: 'lebanons-tech-scene-is-booming-in-2026',
+    slug: 'lebanons-tech-scene-is-booming-in-2026',
     content: "Lebanon's vibrant tech ecosystem continues to expand rapidly with new incubators and AI startups taking center stage in Beirut.",
     summary: "A deep dive into Lebanon's growing technology sector.",
     status: 'Published',
@@ -28,6 +31,8 @@ const DEFAULT_SEED_ARTICLES = [
   {
     id: 'lb-en-2',
     title: '10 Best Rooftop Bars in Beirut This Summer',
+    permalink: '10-best-rooftop-bars-in-beirut-this-summer',
+    slug: '10-best-rooftop-bars-in-beirut-this-summer',
     content: "Discover the most breathtaking rooftop lounges across Beirut featuring panoramic Mediterranean views and signature cocktails.",
     summary: "The definitive guide to Beirut nightlife and rooftop experiences.",
     status: 'Published',
@@ -47,6 +52,8 @@ const DEFAULT_SEED_ARTICLES = [
   {
     id: 'sa-ryd-ar-1',
     title: 'موسم الرياض يستقطب ملايين الزوار بفعاليات غير مسبوقة',
+    permalink: 'موسم-الرياض-يستقطب-ملايين-الزوار-بفعاليات-غير-مسبوقة',
+    slug: 'موسم-الرياض-يستقطب-ملايين-الزوار-بفعاليات-غير-مسبوقة',
     content: "تواصل العاصمة السعودية الرياض استضافة ضيوفها برعاية ترفيهية وثقافية استثنائية ضمن موسم الرياض 2026.",
     summary: "فعاليات موسم الرياض تحقق أرقاماً قياسية جديدة.",
     status: 'Published',
@@ -66,6 +73,8 @@ const DEFAULT_SEED_ARTICLES = [
   {
     id: 'ae-dxb-en-1',
     title: 'Dubai Unveils Next-Generation AI Infrastructure',
+    permalink: 'dubai-unveils-next-generation-ai-infrastructure',
+    slug: 'dubai-unveils-next-generation-ai-infrastructure',
     content: "Dubai announces a landmark investment in high-performance cloud compute and artificial intelligence hubs.",
     summary: "Dubai sets new standards for smart city and AI innovation.",
     status: 'Published',
@@ -154,14 +163,23 @@ async function getAllArticles() {
 }
 
 /**
- * Fetches a single article by its unique ID.
- * @param {string} id Unique article ID.
+ * Fetches a single article by its unique ID or permalink/slug.
+ * @param {string} id Unique article ID or permalink/slug.
  * @returns {Promise<Object|null>} The article, or null if not found.
  */
 async function getArticleById(id) {
   const articles = await getAll();
-  const article = articles.find(a => a.id === id);
+  const article = articles.find(a => a.id === id || a.permalink === id || a.slug === id);
   return article || null;
+}
+
+/**
+ * Fetches a single article by its permalink or slug.
+ * @param {string} permalink Article permalink or slug.
+ * @returns {Promise<Object|null>} The article, or null if not found.
+ */
+async function getArticleByPermalink(permalink) {
+  return getArticleById(permalink);
 }
 
 /**
@@ -178,10 +196,14 @@ async function createArticle(articleData) {
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     const imageVal = articleData.image || articleData.imageUrl || '';
+    const rawPermalink = articleData.permalink || articleData.slug || articleData.title || '';
+    const permalinkVal = generatePermalink(rawPermalink);
 
     const newArticle = {
       id: articleData.id || crypto.randomUUID(),
       title: articleData.title,
+      permalink: permalinkVal,
+      slug: permalinkVal,
       content: articleData.content || '',
       summary: articleData.summary || '',
       author: articleData.author || '',
@@ -207,20 +229,31 @@ async function createArticle(articleData) {
 
 /**
  * Updates an existing article in the store.
- * @param {string} id Unique article ID.
+ * @param {string} id Unique article ID or permalink.
  * @param {Object} updateData Fields to update.
  * @returns {Promise<Object|null>} The updated article, or null if not found.
  */
 async function updateArticle(id, updateData) {
   return enqueue(async () => {
     const articles = await getAll();
-    const index = articles.findIndex(a => a.id === id);
+    const index = articles.findIndex(a => a.id === id || a.permalink === id || a.slug === id);
     if (index === -1) {
       return null;
     }
 
     const existing = articles[index];
     const now = new Date().toISOString();
+
+    let permalinkVal;
+    if (typeof updateData.permalink === 'string' && updateData.permalink.trim() !== '') {
+      permalinkVal = generatePermalink(updateData.permalink);
+    } else if (typeof updateData.slug === 'string' && updateData.slug.trim() !== '') {
+      permalinkVal = generatePermalink(updateData.slug);
+    } else if (typeof updateData.title === 'string' && updateData.title.trim() !== '') {
+      permalinkVal = generatePermalink(updateData.title);
+    } else {
+      permalinkVal = existing.permalink || existing.slug || generatePermalink(existing.title || '');
+    }
 
     const imageVal = typeof updateData.imageUrl === 'string'
       ? updateData.imageUrl
@@ -229,6 +262,8 @@ async function updateArticle(id, updateData) {
     const updated = {
       ...existing,
       title: typeof updateData.title === 'string' ? updateData.title : existing.title,
+      permalink: permalinkVal,
+      slug: permalinkVal,
       content: typeof updateData.content === 'string' ? updateData.content : existing.content,
       summary: typeof updateData.summary === 'string' ? updateData.summary : existing.summary,
       author: typeof updateData.author === 'string' ? updateData.author : existing.author,
@@ -253,13 +288,13 @@ async function updateArticle(id, updateData) {
 
 /**
  * Deletes an article from the store.
- * @param {string} id Unique article ID.
+ * @param {string} id Unique article ID or permalink.
  * @returns {Promise<boolean>} True if found and deleted, false otherwise.
  */
 async function deleteArticle(id) {
   return enqueue(async () => {
     const articles = await getAll();
-    const index = articles.findIndex(a => a.id === id);
+    const index = articles.findIndex(a => a.id === id || a.permalink === id || a.slug === id);
     if (index === -1) {
       return false;
     }
@@ -278,9 +313,12 @@ async function deleteArticle(id) {
 function formatPreviewCard(article) {
   if (!article) return null;
   const img = article.imageUrl || article.image || '';
+  const permalinkVal = article.permalink || article.slug || (article.title ? generatePermalink(article.title) : '');
   return {
     id: article.id,
     title: article.title || '',
+    permalink: permalinkVal,
+    slug: permalinkVal,
     summary: article.summary || '',
     image: img,
     imageUrl: img,
@@ -309,6 +347,7 @@ module.exports = {
   ensureInitialized,
   getAllArticles,
   getArticleById,
+  getArticleByPermalink,
   createArticle,
   updateArticle,
   deleteArticle,

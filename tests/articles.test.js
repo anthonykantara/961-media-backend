@@ -345,4 +345,137 @@ describe('Articles API Endpoints', () => {
       expect(res.body.status).toBe('OK');
     });
   });
+
+  describe('SEO Article Permalink Generation & Lookup', () => {
+    const { generatePermalink } = require('../src/utils/permalink');
+
+    it('should correctly format permalink utility function outputs', () => {
+      expect(generatePermalink("Lebanon's Tech Scene is Booming in 2026")).toBe('lebanons-tech-scene-is-booming-in-2026');
+      expect(generatePermalink("Café & Brasserie @ Beirut — 100% Top-Rated!")).toBe('cafe-brasserie-beirut-100-top-rated');
+      expect(generatePermalink("   --  Special @#$ Characters  --  ")).toBe('special-characters');
+      expect(generatePermalink("موسم الرياض يستقطب ملايين الزوار")).toBe('موسم-الرياض-يستقطب-ملايين-الزوار');
+      expect(generatePermalink("")).toBe('untitled');
+      expect(generatePermalink(null)).toBe('untitled');
+    });
+
+    it('should generate permalink and slug automatically on article creation', async () => {
+      const res = await request(app)
+        .post('/api/articles')
+        .send({
+          title: 'Top 10 Hidden Gems in Beirut!',
+          content: 'Full article body content.'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.permalink).toBe('top-10-hidden-gems-in-beirut');
+      expect(res.body.slug).toBe('top-10-hidden-gems-in-beirut');
+
+      const stored = await articleStore.getArticleById(res.body.id);
+      expect(stored.permalink).toBe('top-10-hidden-gems-in-beirut');
+      expect(stored.slug).toBe('top-10-hidden-gems-in-beirut');
+    });
+
+    it('should allow custom permalink or slug overrides on creation', async () => {
+      const res = await request(app)
+        .post('/api/articles')
+        .send({
+          title: 'Unrelated Title',
+          content: 'Content here...',
+          permalink: 'custom-seo-permalink-override'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.permalink).toBe('custom-seo-permalink-override');
+      expect(res.body.slug).toBe('custom-seo-permalink-override');
+    });
+
+    it('should update permalink when article title is updated', async () => {
+      const created = await articleStore.createArticle({
+        title: 'Initial Article Title',
+        content: 'Article content'
+      });
+      expect(created.permalink).toBe('initial-article-title');
+
+      const res = await request(app)
+        .put(`/api/articles/${created.id}`)
+        .send({
+          title: 'Updated Article Title for 2026'
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.permalink).toBe('updated-article-title-for-2026');
+      expect(res.body.slug).toBe('updated-article-title-for-2026');
+    });
+
+    it('should update permalink when permalink is explicitly updated', async () => {
+      const created = await articleStore.createArticle({
+        title: 'Another Article',
+        content: 'Article content'
+      });
+
+      const res = await request(app)
+        .patch(`/api/articles/${created.id}`)
+        .send({
+          permalink: 'explicit-new-permalink-slug'
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.permalink).toBe('explicit-new-permalink-slug');
+      expect(res.body.slug).toBe('explicit-new-permalink-slug');
+    });
+
+    it('should fetch an article by permalink/slug using GET /api/articles/:id', async () => {
+      const created = await articleStore.createArticle({
+        title: 'Unique Article Title for Lookup',
+        content: 'Lookup content.'
+      });
+
+      const permalinkRes = await request(app).get(`/api/articles/${created.permalink}`);
+      expect(permalinkRes.status).toBe(200);
+      expect(permalinkRes.body.id).toBe(created.id);
+      expect(permalinkRes.body.title).toBe(created.title);
+    });
+
+    it('should filter articles by permalink parameter on GET /api/articles', async () => {
+      await articleStore.createArticle({
+        title: 'First Search Title',
+        content: 'Content 1'
+      });
+      await articleStore.createArticle({
+        title: 'Second Search Title',
+        content: 'Content 2'
+      });
+
+      const res = await request(app).get('/api/articles?permalink=second-search-title');
+      expect(res.status).toBe(200);
+      expect(res.body.length).toBe(1);
+      expect(res.body[0].title).toBe('Second Search Title');
+    });
+
+    it('should include permalink and slug in preview card output', async () => {
+      const article = await articleStore.createArticle({
+        title: 'Preview Card Article Test',
+        content: 'Preview body'
+      });
+
+      const res = await request(app).get(`/api/articles/${article.id}/preview`);
+      expect(res.status).toBe(200);
+      expect(res.body.permalink).toBe('preview-card-article-test');
+      expect(res.body.slug).toBe('preview-card-article-test');
+    });
+
+    it('should reject non-string permalink values with validation error', async () => {
+      const res = await request(app)
+        .post('/api/articles')
+        .send({
+          title: 'Test Title',
+          content: 'Test content',
+          permalink: 12345
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Validation failed');
+      expect(res.body.messages).toContain('Permalink must be a string.');
+    });
+  });
 });
