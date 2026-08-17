@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Centralized backend API server for 961 Media",
   "main": "src/server.js",
+  "types": "src/types/index.d.ts",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
