@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const articlesRouter = require('./routes/articles');
+const pipelineRouter = require('./routes/pipeline');
 
 // Load environment variables
 dotenv.config();
@@ -49,6 +50,7 @@ app.options('*', cors(corsOptions));
 
 // Register routes
 app.use('/api/articles', articlesRouter);
+app.use('/api/pipeline', pipelineRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
