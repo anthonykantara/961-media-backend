@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, '../../data');
 const FILE_PATH = path.join(DATA_DIR, process.env.NODE_ENV === 'test' ? 'locations.test.json' : 'locations.json');
@@ -48,6 +49,13 @@ const DEFAULT_SEED_LOCATIONS = [
 ];
 
 let writeQueue = Promise.resolve();
+let queue = Promise.resolve();
+
+function enqueue(fn) {
+  const res = queue.then(() => fn());
+  queue = res.catch(() => {});
+  return res;
+}
 
 async function ensureInitialized() {
   try {
@@ -76,7 +84,7 @@ async function getAllLocations() {
 async function saveAll(locations) {
   await ensureInitialized();
   writeQueue = writeQueue.then(async () => {
-    const tempPath = `${FILE_PATH}.tmp.${Date.now()}`;
+    const tempPath = `${FILE_PATH}.tmp.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
     await fs.writeFile(tempPath, JSON.stringify(locations, null, 2), 'utf8');
     await fs.rename(tempPath, FILE_PATH);
   }).catch(err => {
@@ -88,76 +96,82 @@ async function saveAll(locations) {
 async function getLocationById(id) {
   if (!id) return null;
   const locations = await getAllLocations();
-  return locations.find(l => l.id.toLowerCase() === String(id).toLowerCase()) || null;
+  return locations.find(l => l.id && l.id.toLowerCase() === String(id).toLowerCase()) || null;
 }
 
 async function createLocation(locationData) {
-  const locations = await getAllLocations();
-  const id = String(locationData.id || '').trim().toLowerCase();
+  return enqueue(async () => {
+    const locations = await getAllLocations();
+    const id = String(locationData.id || '').trim().toLowerCase();
 
-  if (!id) {
-    throw new Error('Location ID is required.');
-  }
+    if (!id) {
+      throw new Error('Location ID is required.');
+    }
 
-  const existingIndex = locations.findIndex(l => l.id.toLowerCase() === id);
-  if (existingIndex !== -1) {
-    throw new Error(`Location with ID '${id}' already exists.`);
-  }
+    const existingIndex = locations.findIndex(l => l.id && l.id.toLowerCase() === id);
+    if (existingIndex !== -1) {
+      throw new Error(`Location with ID '${id}' already exists.`);
+    }
 
-  const newLocation = {
-    id,
-    name: locationData.name || id,
-    country: locationData.country || '',
-    countryCode: locationData.countryCode || '',
-    regionId: (locationData.regionId || 'other').toLowerCase(),
-    regionName: locationData.regionName || 'Other',
-    timezone: locationData.timezone || 'UTC',
-    enabled: locationData.enabled !== undefined ? Boolean(locationData.enabled) : true
-  };
+    const newLocation = {
+      id,
+      name: locationData.name || id,
+      country: locationData.country || '',
+      countryCode: locationData.countryCode || '',
+      regionId: (locationData.regionId || 'other').toLowerCase(),
+      regionName: locationData.regionName || 'Other',
+      timezone: locationData.timezone || 'UTC',
+      enabled: locationData.enabled !== undefined ? Boolean(locationData.enabled) : true
+    };
 
-  locations.push(newLocation);
-  await saveAll(locations);
-  return newLocation;
+    locations.push(newLocation);
+    await saveAll(locations);
+    return newLocation;
+  });
 }
 
 async function updateLocation(id, updateData) {
-  const locations = await getAllLocations();
-  const normalizedId = String(id).trim().toLowerCase();
-  const index = locations.findIndex(l => l.id.toLowerCase() === normalizedId);
+  return enqueue(async () => {
+    const locations = await getAllLocations();
+    const normalizedId = String(id).trim().toLowerCase();
+    const index = locations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
 
-  if (index === -1) {
-    return null;
-  }
+    if (index === -1) {
+      return null;
+    }
 
-  const existing = locations[index];
-  const updated = {
-    ...existing,
-    name: typeof updateData.name === 'string' ? updateData.name : existing.name,
-    country: typeof updateData.country === 'string' ? updateData.country : existing.country,
-    countryCode: typeof updateData.countryCode === 'string' ? updateData.countryCode : existing.countryCode,
-    regionId: typeof updateData.regionId === 'string' ? updateData.regionId.toLowerCase() : existing.regionId,
-    regionName: typeof updateData.regionName === 'string' ? updateData.regionName : existing.regionName,
-    timezone: typeof updateData.timezone === 'string' ? updateData.timezone : existing.timezone,
-    enabled: updateData.enabled !== undefined ? Boolean(updateData.enabled) : existing.enabled
-  };
+    const existing = locations[index];
+    const updated = {
+      ...existing,
+      name: typeof updateData.name === 'string' ? updateData.name : existing.name,
+      country: typeof updateData.country === 'string' ? updateData.country : existing.country,
+      countryCode: typeof updateData.countryCode === 'string' ? updateData.countryCode : existing.countryCode,
+      regionId: typeof updateData.regionId === 'string' ? updateData.regionId.toLowerCase() : existing.regionId,
+      regionName: typeof updateData.regionName === 'string' ? updateData.regionName : existing.regionName,
+      timezone: typeof updateData.timezone === 'string' ? updateData.timezone : existing.timezone,
+      enabled: updateData.enabled !== undefined ? Boolean(updateData.enabled) : existing.enabled
+    };
 
-  locations[index] = updated;
-  await saveAll(locations);
-  return updated;
+    locations[index] = updated;
+    await saveAll(locations);
+    return updated;
+  });
 }
 
 async function deleteLocation(id) {
-  const locations = await getAllLocations();
-  const normalizedId = String(id).trim().toLowerCase();
-  const index = locations.findIndex(l => l.id.toLowerCase() === normalizedId);
+  return enqueue(async () => {
+    const locations = await getAllLocations();
+    const normalizedId = String(id).trim().toLowerCase();
+    const index = locations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
 
-  if (index === -1) {
-    return false;
-  }
+    if (index === -1) {
+      return false;
+    }
 
-  locations.splice(index, 1);
-  await saveAll(locations);
-  return true;
+    locations.splice(index, 1);
+    await saveAll(locations);
+    return true;
+  });
 }
 
 /**
@@ -175,7 +189,7 @@ async function getRegionalGroups() {
   const regionMap = new Map();
 
   activeLocations.forEach(loc => {
-    const rId = loc.regionId.toLowerCase();
+    const rId = (loc.regionId || 'other').toLowerCase();
     if (!regionMap.has(rId)) {
       regionMap.set(rId, {
         id: rId,
@@ -197,7 +211,7 @@ async function getLocationsByRegion(regionId) {
   if (!regionId) return [];
   const locations = await getAllLocations();
   const normalizedRegion = String(regionId).trim().toLowerCase();
-  return locations.filter(l => l.regionId.toLowerCase() === normalizedRegion && l.enabled !== false);
+  return locations.filter(l => (l.regionId || '').toLowerCase() === normalizedRegion && l.enabled !== false);
 }
 
 /**
@@ -208,17 +222,19 @@ async function getLocationsByRegion(regionId) {
 async function getArticlesByRegion(articles, regionId) {
   if (!regionId || !Array.isArray(articles)) return articles;
   const regionLocations = await getLocationsByRegion(regionId);
-  const locationIds = new Set(regionLocations.map(l => l.id.toLowerCase()));
+  const locationIds = new Set(regionLocations.map(l => (l.id || '').toLowerCase()));
 
   return articles.filter(a => a.locationId && locationIds.has(a.locationId.toLowerCase()));
 }
 
 async function clearStore(useSeed = false) {
-  if (useSeed) {
-    await saveAll(DEFAULT_SEED_LOCATIONS);
-  } else {
-    await saveAll([]);
-  }
+  return enqueue(async () => {
+    if (useSeed) {
+      await saveAll(DEFAULT_SEED_LOCATIONS);
+    } else {
+      await saveAll([]);
+    }
+  });
 }
 
 module.exports = {

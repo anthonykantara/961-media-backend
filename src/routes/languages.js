@@ -47,6 +47,12 @@ router.get('/', async (req, res, next) => {
     }
 
     const allLangs = await languageStore.getAllLanguages();
+
+    if (enabled === 'false' || active === 'false') {
+      const inactive = allLangs.filter(l => l.enabled === false);
+      return res.status(200).json(inactive);
+    }
+
     return res.status(200).json(allLangs);
   } catch (err) {
     next(err);
@@ -54,12 +60,12 @@ router.get('/', async (req, res, next) => {
 });
 
 /**
- * GET /api/languages/resolve/:locale
+ * GET /api/languages/resolve/:locale?
  * Resolves a locale string to an active language object using fallback rules.
  */
-router.get('/resolve/:locale', async (req, res, next) => {
+router.get(['/resolve/:locale', '/resolve'], async (req, res, next) => {
   try {
-    const { locale } = req.params;
+    const locale = req.params.locale || '';
     const resolved = await languageStore.resolveLocale(locale);
     const fallbackChain = await LanguageContext.getFallbackChain(locale);
     return res.status(200).json({

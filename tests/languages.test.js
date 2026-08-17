@@ -32,6 +32,14 @@ describe('Language Registry & Localization Sync API', () => {
       expect(res.status).toBe(200);
       expect(res.body.every(l => l.hasOwnProperty('code') && l.hasOwnProperty('name'))).toBe(true);
     });
+
+    it('should return inactive languages when ?enabled=false', async () => {
+      await languageStore.updateLanguage('fr', { enabled: false });
+      const res = await request(app).get('/api/languages?enabled=false');
+      expect(res.status).toBe(200);
+      expect(res.body.length).toBe(1);
+      expect(res.body[0].code).toBe('fr');
+    });
   });
 
   describe('POST /api/languages & Dashboard Sync', () => {
@@ -118,6 +126,13 @@ describe('Language Registry & Localization Sync API', () => {
       const res = await request(app).get('/api/languages/resolve/ja');
       expect(res.status).toBe(200);
       expect(res.body.resolvedLanguage.code).toBe('en');
+    });
+
+    it('should resolve default language when /api/languages/resolve is called without parameter', async () => {
+      const res = await request(app).get('/api/languages/resolve');
+      expect(res.status).toBe(200);
+      expect(res.body.resolvedLanguage.code).toBe('en');
+      expect(res.body.fallbackChain).toContain('en');
     });
   });
 

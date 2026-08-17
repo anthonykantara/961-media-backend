@@ -31,6 +31,19 @@ describe('Locations & Regional Models API', () => {
       expect(ids).toContain('sa-riyadh');
       expect(ids).toContain('ae-dubai');
     });
+
+    it('should filter enabled vs disabled locations', async () => {
+      await locationStore.updateLocation('lb', { enabled: false });
+
+      const enabledRes = await request(app).get('/api/locations?enabled=true');
+      expect(enabledRes.status).toBe(200);
+      expect(enabledRes.body.some(l => l.id === 'lb')).toBe(false);
+
+      const disabledRes = await request(app).get('/api/locations?enabled=false');
+      expect(disabledRes.status).toBe(200);
+      expect(disabledRes.body.length).toBe(1);
+      expect(disabledRes.body[0].id).toBe('lb');
+    });
   });
 
   describe('GET /api/regions', () => {

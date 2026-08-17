@@ -98,5 +98,34 @@ describe('CMS Dashboard & Web Frontend Full Synchronization', () => {
       expect(levantRes.body.length).toBe(1);
       expect(levantRes.body[0].title).toBe('Lebanon Article');
     });
+
+    it('should return articles of all statuses when status=all is specified', async () => {
+      await articleStore.createArticle({ title: 'Draft Item', content: 'C1', status: 'draft' });
+      await articleStore.createArticle({ title: 'Pub Item', content: 'C2', status: 'published' });
+
+      const feedRes = await request(app).get('/api/articles/feed?status=all');
+      expect(feedRes.status).toBe(200);
+      expect(feedRes.body.length).toBe(2);
+
+      const articlesRes = await request(app).get('/api/articles?status=all');
+      expect(articlesRes.status).toBe(200);
+      expect(articlesRes.body.length).toBe(2);
+    });
+
+    it('should safely process concurrent store saves without file collisions', async () => {
+      const writes = Array.from({ length: 5 }, (_, i) =>
+        articleStore.createArticle({
+          title: `Concurrent Article ${i}`,
+          content: `Content ${i}`,
+          status: 'published'
+        })
+      );
+
+      const results = await Promise.all(writes);
+      expect(results.length).toBe(5);
+
+      const all = await articleStore.getAllArticles();
+      expect(all.length).toBe(5);
+    });
   });
 });

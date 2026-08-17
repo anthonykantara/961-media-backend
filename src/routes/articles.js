@@ -36,6 +36,16 @@ function validateArticleData(data, isUpdate = false) {
     }
   });
 
+  const numericOrStringFields = ['views', 'shares'];
+  numericOrStringFields.forEach(field => {
+    if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
+      if (typeof data[field] !== 'string' && typeof data[field] !== 'number') {
+        const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+        errors.push(`${fieldName} must be a string or number.`);
+      }
+    }
+  });
+
   return errors;
 }
 
@@ -48,7 +58,9 @@ router.get('/feed', async (req, res, next) => {
     let articles = await articleStore.getAllArticles();
     // Default to published status for web feed unless specifically overridden
     const status = req.query.status || 'published';
-    articles = articles.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
+    if (status.toLowerCase() !== 'all') {
+      articles = articles.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
+    }
 
     const { category, locationId, regionId, language, search, limit, page } = req.query;
 
@@ -64,8 +76,8 @@ router.get('/feed', async (req, res, next) => {
     if (language) {
       articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
     }
-    if (search) {
-      const q = search.toLowerCase();
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
       articles = articles.filter(a =>
         (a.title || '').toLowerCase().includes(q) ||
         (a.content || '').toLowerCase().includes(q) ||
@@ -104,7 +116,7 @@ router.get('/', async (req, res, next) => {
     if (category) {
       articles = articles.filter(a => (a.category || '').toLowerCase() === category.toLowerCase());
     }
-    if (status) {
+    if (status && status.toLowerCase() !== 'all') {
       articles = articles.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
     }
     if (locationId) {
@@ -116,8 +128,8 @@ router.get('/', async (req, res, next) => {
     if (language) {
       articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
     }
-    if (search) {
-      const q = search.toLowerCase();
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
       articles = articles.filter(a =>
         (a.title || '').toLowerCase().includes(q) ||
         (a.content || '').toLowerCase().includes(q) ||

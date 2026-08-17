@@ -33,10 +33,13 @@ export interface PreviewCard {
   imageUrl: string;
   author: string;
   date: string;
+  time?: string;
   category: string;
   locationId: string;
   language: string;
   status: string;
+  views?: string | number;
+  shares?: string | number;
 }
 
 export interface Language {

@@ -85,6 +85,13 @@ const DEFAULT_SEED_ARTICLES = [
 ];
 
 let writeQueue = Promise.resolve();
+let queue = Promise.resolve();
+
+function enqueue(fn) {
+  const res = queue.then(() => fn());
+  queue = res.catch(() => {});
+  return res;
+}
 
 /**
  * Ensures that the data directory and the articles.json file exist.
@@ -128,7 +135,7 @@ async function getAll() {
 async function saveAll(articles) {
   await ensureInitialized();
   writeQueue = writeQueue.then(async () => {
-    const tempPath = `${FILE_PATH}.tmp.${Date.now()}`;
+    const tempPath = `${FILE_PATH}.tmp.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
     await fs.writeFile(tempPath, JSON.stringify(articles, null, 2), 'utf8');
     await fs.rename(tempPath, FILE_PATH);
   }).catch(err => {
@@ -163,37 +170,39 @@ async function getArticleById(id) {
  * @returns {Promise<Object>} The newly created article.
  */
 async function createArticle(articleData) {
-  const articles = await getAll();
+  return enqueue(async () => {
+    const articles = await getAll();
 
-  const now = new Date().toISOString();
-  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const now = new Date().toISOString();
+    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-  const imageVal = articleData.image || articleData.imageUrl || '';
+    const imageVal = articleData.image || articleData.imageUrl || '';
 
-  const newArticle = {
-    id: articleData.id || crypto.randomUUID(),
-    title: articleData.title,
-    content: articleData.content || '',
-    summary: articleData.summary || '',
-    author: articleData.author || '',
-    category: articleData.category || '',
-    image: imageVal,
-    imageUrl: imageVal,
-    status: articleData.status || 'draft',
-    locationId: articleData.locationId || 'lb',
-    language: articleData.language || 'en',
-    date: articleData.date || dateStr,
-    time: articleData.time || timeStr,
-    views: articleData.views !== undefined ? String(articleData.views) : '0',
-    shares: articleData.shares !== undefined ? String(articleData.shares) : '0',
-    createdAt: now,
-    updatedAt: now
-  };
+    const newArticle = {
+      id: articleData.id || crypto.randomUUID(),
+      title: articleData.title,
+      content: articleData.content || '',
+      summary: articleData.summary || '',
+      author: articleData.author || '',
+      category: articleData.category || '',
+      image: imageVal,
+      imageUrl: imageVal,
+      status: articleData.status || 'draft',
+      locationId: articleData.locationId || 'lb',
+      language: articleData.language || 'en',
+      date: articleData.date || dateStr,
+      time: articleData.time || timeStr,
+      views: articleData.views !== undefined ? String(articleData.views) : '0',
+      shares: articleData.shares !== undefined ? String(articleData.shares) : '0',
+      createdAt: now,
+      updatedAt: now
+    };
 
-  articles.push(newArticle);
-  await saveAll(articles);
-  return newArticle;
+    articles.push(newArticle);
+    await saveAll(articles);
+    return newArticle;
+  });
 }
 
 /**
@@ -203,41 +212,43 @@ async function createArticle(articleData) {
  * @returns {Promise<Object|null>} The updated article, or null if not found.
  */
 async function updateArticle(id, updateData) {
-  const articles = await getAll();
-  const index = articles.findIndex(a => a.id === id);
-  if (index === -1) {
-    return null;
-  }
+  return enqueue(async () => {
+    const articles = await getAll();
+    const index = articles.findIndex(a => a.id === id);
+    if (index === -1) {
+      return null;
+    }
 
-  const existing = articles[index];
-  const now = new Date().toISOString();
+    const existing = articles[index];
+    const now = new Date().toISOString();
 
-  const imageVal = typeof updateData.image === 'string'
-    ? updateData.image
-    : (typeof updateData.imageUrl === 'string' ? updateData.imageUrl : (existing.image || existing.imageUrl || ''));
+    const imageVal = typeof updateData.imageUrl === 'string'
+      ? updateData.imageUrl
+      : (typeof updateData.image === 'string' ? updateData.image : (existing.imageUrl || existing.image || ''));
 
-  const updated = {
-    ...existing,
-    title: typeof updateData.title === 'string' ? updateData.title : existing.title,
-    content: typeof updateData.content === 'string' ? updateData.content : existing.content,
-    summary: typeof updateData.summary === 'string' ? updateData.summary : existing.summary,
-    author: typeof updateData.author === 'string' ? updateData.author : existing.author,
-    category: typeof updateData.category === 'string' ? updateData.category : (existing.category || ''),
-    image: imageVal,
-    imageUrl: imageVal,
-    status: typeof updateData.status === 'string' ? updateData.status : existing.status,
-    locationId: typeof updateData.locationId === 'string' ? updateData.locationId : (existing.locationId || 'lb'),
-    language: typeof updateData.language === 'string' ? updateData.language : (existing.language || 'en'),
-    date: typeof updateData.date === 'string' ? updateData.date : existing.date,
-    time: typeof updateData.time === 'string' ? updateData.time : existing.time,
-    views: updateData.views !== undefined ? String(updateData.views) : (existing.views || '0'),
-    shares: updateData.shares !== undefined ? String(updateData.shares) : (existing.shares || '0'),
-    updatedAt: now
-  };
+    const updated = {
+      ...existing,
+      title: typeof updateData.title === 'string' ? updateData.title : existing.title,
+      content: typeof updateData.content === 'string' ? updateData.content : existing.content,
+      summary: typeof updateData.summary === 'string' ? updateData.summary : existing.summary,
+      author: typeof updateData.author === 'string' ? updateData.author : existing.author,
+      category: typeof updateData.category === 'string' ? updateData.category : (existing.category || ''),
+      image: imageVal,
+      imageUrl: imageVal,
+      status: typeof updateData.status === 'string' ? updateData.status : existing.status,
+      locationId: typeof updateData.locationId === 'string' ? updateData.locationId : (existing.locationId || 'lb'),
+      language: typeof updateData.language === 'string' ? updateData.language : (existing.language || 'en'),
+      date: typeof updateData.date === 'string' ? updateData.date : existing.date,
+      time: typeof updateData.time === 'string' ? updateData.time : existing.time,
+      views: updateData.views !== undefined ? String(updateData.views) : (existing.views || '0'),
+      shares: updateData.shares !== undefined ? String(updateData.shares) : (existing.shares || '0'),
+      updatedAt: now
+    };
 
-  articles[index] = updated;
-  await saveAll(articles);
-  return updated;
+    articles[index] = updated;
+    await saveAll(articles);
+    return updated;
+  });
 }
 
 /**
@@ -246,15 +257,17 @@ async function updateArticle(id, updateData) {
  * @returns {Promise<boolean>} True if found and deleted, false otherwise.
  */
 async function deleteArticle(id) {
-  const articles = await getAll();
-  const index = articles.findIndex(a => a.id === id);
-  if (index === -1) {
-    return false;
-  }
+  return enqueue(async () => {
+    const articles = await getAll();
+    const index = articles.findIndex(a => a.id === id);
+    if (index === -1) {
+      return false;
+    }
 
-  articles.splice(index, 1);
-  await saveAll(articles);
-  return true;
+    articles.splice(index, 1);
+    await saveAll(articles);
+    return true;
+  });
 }
 
 /**
@@ -287,7 +300,9 @@ function formatPreviewCard(article) {
  * Resets the store with an empty array.
  */
 async function clearStore() {
-  await saveAll([]);
+  return enqueue(async () => {
+    await saveAll([]);
+  });
 }
 
 module.exports = {

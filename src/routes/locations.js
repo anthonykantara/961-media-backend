@@ -21,6 +21,16 @@ function validateLocationData(data, isUpdate = false) {
     }
   }
 
+  const optionalFields = ['country', 'countryCode', 'regionId', 'regionName', 'timezone'];
+  optionalFields.forEach(field => {
+    if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
+      if (typeof data[field] !== 'string') {
+        const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+        errors.push(`${fieldName} must be a string.`);
+      }
+    }
+  });
+
   return errors;
 }
 
@@ -34,11 +44,13 @@ router.get('/', async (req, res, next) => {
     let locations = await locationStore.getAllLocations();
 
     if (regionId) {
-      locations = locations.filter(l => l.regionId.toLowerCase() === regionId.toLowerCase());
+      locations = locations.filter(l => (l.regionId || '').toLowerCase() === regionId.toLowerCase());
     }
 
     if (enabled === 'true') {
       locations = locations.filter(l => l.enabled !== false);
+    } else if (enabled === 'false') {
+      locations = locations.filter(l => l.enabled === false);
     }
 
     return res.status(200).json(locations);
