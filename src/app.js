@@ -6,6 +6,7 @@ const pipelineRouter = require('./routes/pipeline');
 const languagesRouter = require('./routes/languages');
 const locationsRouter = require('./routes/locations');
 const regionsRouter = require('./routes/regions');
+const expressCreationRouter = require('./routes/expressCreation');
 
 // Load environment variables
 dotenv.config();
@@ -52,11 +53,13 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Register routes
+app.use('/api/articles/express-creation', expressCreationRouter);
 app.use('/api/articles', articlesRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/languages', languagesRouter);
 app.use('/api/locations', locationsRouter);
 app.use('/api/regions', regionsRouter);
+app.use('/api/express-creation', expressCreationRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
