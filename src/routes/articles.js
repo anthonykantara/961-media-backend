@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const articleStore = require('../models/articleStore');
+const { dispatchAll } = require('../workers/dispatchWorker');
 const locationStore = require('../models/locationStore');
 
 // Helper function to validate validation parameters
@@ -270,6 +271,49 @@ router.delete('/:id', async (req, res, next) => {
       return res.status(404).json({ error: `Article with ID ${id} not found.` });
     }
     return res.status(200).json({ message: 'Article successfully deleted.', id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/articles/:id/dispatch
+ * Triggers background social distribution and CMS publishing dispatch workers.
+ */
+router.post('/:id/dispatch', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await articleStore.getArticleById(id);
+    if (!existing) {
+      return res.status(404).json({ error: `Article with ID ${id} not found.` });
+    }
+
+    const dispatchResults = await dispatchAll(id, req.body || {});
+    return res.status(200).json(dispatchResults);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/articles/:id/publish
+ * Publishes an article and triggers full background dispatch pipeline.
+ */
+router.post('/:id/publish', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await articleStore.getArticleById(id);
+    if (!existing) {
+      return res.status(404).json({ error: `Article with ID ${id} not found.` });
+    }
+
+    const dispatchResults = await dispatchAll(id, req.body || {});
+    const updatedArticle = await articleStore.getArticleById(id);
+
+    return res.status(200).json({
+      article: updatedArticle,
+      dispatch: dispatchResults
+    });
   } catch (err) {
     next(err);
   }
