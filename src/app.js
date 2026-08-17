@@ -45,6 +45,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Register routes
 app.use('/api/articles', articlesRouter);
@@ -61,16 +62,26 @@ app.use((req, res, next) => {
 
 // Centralized JSON error handling middleware
 app.use((err, req, res, next) => {
-  if (err.message !== 'Not allowed by CORS') {
+  const isCorsError = err.message === 'Not allowed by CORS';
+  const isBadRequest = err.status === 400 || err.statusCode === 400 || err instanceof SyntaxError;
+
+  if (!isCorsError && !isBadRequest) {
     console.error('Unhandled error:', err);
   }
-  
-  // Custom status code if defined, otherwise 500
-  const statusCode = err.status || (err.message === 'Not allowed by CORS' ? 400 : 500);
+
+  const statusCode = err.status || err.statusCode || (isCorsError ? 400 : 500);
+
+  let errorType = 'Internal Server Error';
+  if (isCorsError) {
+    errorType = 'CORS Error';
+  } else if (isBadRequest) {
+    errorType = 'Bad Request';
+  }
+
   const responseMessage = err.message || 'An internal server error occurred';
 
   res.status(statusCode).json({
-    error: err.message === 'Not allowed by CORS' ? 'CORS Error' : 'Internal Server Error',
+    error: errorType,
     message: responseMessage
   });
 });

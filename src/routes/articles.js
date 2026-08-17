@@ -4,6 +4,10 @@ const articleStore = require('../models/articleStore');
 
 // Helper function to validate validation parameters
 function validateArticleData(data, isUpdate = false) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return ['Request body must be a valid JSON object.'];
+  }
+
   const errors = [];
 
   // For POST, title is required. For PUT, if title is provided, it must be valid.
@@ -21,11 +25,12 @@ function validateArticleData(data, isUpdate = false) {
   }
 
   // Optional string validation if provided
-  const optionalFields = ['summary', 'author', 'image', 'status'];
+  const optionalFields = ['summary', 'author', 'category', 'image', 'imageUrl', 'status', 'locationId', 'language', 'date', 'time'];
   optionalFields.forEach(field => {
-    if (data.hasOwnProperty(field)) {
+    if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
       if (typeof data[field] !== 'string') {
-        errors.push(`${field.charAt(0).toUpperCase() + field.slice(1)} must be a string.`);
+        const fieldName = field === 'imageUrl' ? 'ImageUrl' : (field.charAt(0).toUpperCase() + field.slice(1));
+        errors.push(`${fieldName} must be a string.`);
       }
     }
   });
@@ -35,11 +40,46 @@ function validateArticleData(data, isUpdate = false) {
 
 /**
  * GET /api/articles
- * Returns all articles (sorted newest first)
+ * Returns all articles (sorted newest first), with optional filtering/search parameters:
+ * ?category=...&status=...&locationId=...&language=...&search=...&limit=...&page=...
  */
 router.get('/', async (req, res, next) => {
   try {
-    const articles = await articleStore.getAllArticles();
+    let articles = await articleStore.getAllArticles();
+    const { category, status, locationId, language, search, limit, page } = req.query;
+
+    if (category) {
+      articles = articles.filter(a => (a.category || '').toLowerCase() === category.toLowerCase());
+    }
+    if (status) {
+      articles = articles.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
+    }
+    if (locationId) {
+      articles = articles.filter(a => (a.locationId || '').toLowerCase() === locationId.toLowerCase());
+    }
+    if (language) {
+      articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      articles = articles.filter(a =>
+        (a.title || '').toLowerCase().includes(q) ||
+        (a.content || '').toLowerCase().includes(q) ||
+        (a.summary || '').toLowerCase().includes(q) ||
+        (a.author || '').toLowerCase().includes(q) ||
+        (a.category || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10);
+      const parsedPage = parseInt(page, 10) || 1;
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        const start = (parsedPage - 1) * parsedLimit;
+        articles = articles.slice(start, start + parsedLimit);
+      }
+    }
+
     return res.status(200).json(articles);
   } catch (err) {
     next(err);

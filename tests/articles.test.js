@@ -260,4 +260,89 @@ describe('Articles API Endpoints', () => {
       expect(res.body.message).toBe('Not allowed by CORS');
     });
   });
+
+  describe('Filtering, Search, and Enhanced Features', () => {
+    it('should filter articles by category, status, locationId, and language', async () => {
+      await articleStore.createArticle({
+        title: 'Tech Article',
+        content: 'Content 1',
+        category: 'Tech',
+        status: 'published',
+        locationId: 'lb',
+        language: 'en'
+      });
+
+      await articleStore.createArticle({
+        title: 'Food Article',
+        content: 'Content 2',
+        category: 'Food',
+        status: 'draft',
+        locationId: 'sa-riyadh',
+        language: 'ar'
+      });
+
+      const catRes = await request(app).get('/api/articles?category=tech');
+      expect(catRes.status).toBe(200);
+      expect(catRes.body.length).toBe(1);
+      expect(catRes.body[0].title).toBe('Tech Article');
+
+      const locRes = await request(app).get('/api/articles?locationId=sa-riyadh');
+      expect(locRes.status).toBe(200);
+      expect(locRes.body.length).toBe(1);
+      expect(locRes.body[0].title).toBe('Food Article');
+    });
+
+    it('should search articles by term across title and content', async () => {
+      await articleStore.createArticle({
+        title: 'Beirut Rooftops',
+        content: 'Amazing views'
+      });
+      await articleStore.createArticle({
+        title: 'Dubai AI Hub',
+        content: 'Tech expansion'
+      });
+
+      const searchRes = await request(app).get('/api/articles?search=rooftops');
+      expect(searchRes.status).toBe(200);
+      expect(searchRes.body.length).toBe(1);
+      expect(searchRes.body[0].title).toBe('Beirut Rooftops');
+    });
+
+    it('should support pagination with limit and page parameters', async () => {
+      for (let i = 1; i <= 5; i++) {
+        await articleStore.createArticle({
+          title: `Article ${i}`,
+          content: `Content ${i}`
+        });
+      }
+
+      const page1Res = await request(app).get('/api/articles?limit=2&page=1');
+      expect(page1Res.status).toBe(200);
+      expect(page1Res.body.length).toBe(2);
+
+      const page3Res = await request(app).get('/api/articles?limit=2&page=3');
+      expect(page3Res.status).toBe(200);
+      expect(page3Res.body.length).toBe(1);
+    });
+
+    it('should accept imageUrl and synchronize it with image property', async () => {
+      const res = await request(app)
+        .post('/api/articles')
+        .send({
+          title: 'Image Test Article',
+          content: 'Test content with imageUrl',
+          imageUrl: 'https://example.com/image.jpg'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.image).toBe('https://example.com/image.jpg');
+      expect(res.body.imageUrl).toBe('https://example.com/image.jpg');
+    });
+
+    it('should return health status on GET /api/health', async () => {
+      const res = await request(app).get('/api/health');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('OK');
+    });
+  });
 });
