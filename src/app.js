@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const articlesRouter = require('./routes/articles');
+const languagesRouter = require('./routes/languages');
+const locationsRouter = require('./routes/locations');
+const regionsRouter = require('./routes/regions');
 
 // Load environment variables
 dotenv.config();
@@ -49,6 +52,9 @@ app.options('*', cors(corsOptions));
 
 // Register routes
 app.use('/api/articles', articlesRouter);
+app.use('/api/languages', languagesRouter);
+app.use('/api/locations', locationsRouter);
+app.use('/api/regions', regionsRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
