@@ -258,6 +258,32 @@ async function deleteArticle(id) {
 }
 
 /**
+ * Formats an article into a preview card structure for public web feed displays.
+ * @param {Object} article 
+ * @returns {Object} Preview card object
+ */
+function formatPreviewCard(article) {
+  if (!article) return null;
+  const img = article.imageUrl || article.image || '';
+  return {
+    id: article.id,
+    title: article.title || '',
+    summary: article.summary || '',
+    image: img,
+    imageUrl: img,
+    author: article.author || '',
+    date: article.date || '',
+    time: article.time || '',
+    category: article.category || '',
+    locationId: article.locationId || '',
+    language: article.language || '',
+    status: article.status || 'draft',
+    views: article.views || '0',
+    shares: article.shares || '0'
+  };
+}
+
+/**
  * Resets the store with an empty array.
  */
 async function clearStore() {
@@ -271,5 +297,6 @@ module.exports = {
   createArticle,
   updateArticle,
   deleteArticle,
+  formatPreviewCard,
   clearStore
 };
