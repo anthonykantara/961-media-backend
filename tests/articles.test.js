@@ -477,5 +477,85 @@ describe('Articles API Endpoints', () => {
       expect(res.body.error).toBe('Validation failed');
       expect(res.body.messages).toContain('Permalink must be a string.');
     });
+
+    it('should create an SEO auto-redirect (301 Moved Permanently) when article title or permalink is updated', async () => {
+      // 1. Create original published article
+      const created = await articleStore.createArticle({
+        title: 'Original Article Headline for SEO Test',
+        content: 'Published content body...',
+        status: 'published'
+      });
+      const originalPermalink = created.permalink;
+      expect(originalPermalink).toBe('original-article-headline-for-seo-test');
+
+      // 2. Update the headline (title changed after publishing)
+      const updateRes = await request(app)
+        .put(`/api/articles/${created.id}`)
+        .send({
+          title: 'New Updated Article Headline for SEO Test'
+        });
+
+      expect(updateRes.status).toBe(200);
+      const newPermalink = updateRes.body.permalink;
+      expect(newPermalink).toBe('new-updated-article-headline-for-seo-test');
+      expect(updateRes.body.redirects).toContain(originalPermalink);
+
+      // 3. GET /api/articles/:oldPermalink should issue HTTP 301 Moved Permanently redirect
+      const redirectRes = await request(app).get(`/api/articles/${originalPermalink}`);
+      expect(redirectRes.status).toBe(301);
+      expect(redirectRes.headers.location).toBe(`/api/articles/${newPermalink}`);
+
+      // 4. GET /api/articles/:oldPermalink/preview should issue HTTP 301 redirect
+      const previewRedirectRes = await request(app).get(`/api/articles/${originalPermalink}/preview`);
+      expect(previewRedirectRes.status).toBe(301);
+      expect(previewRedirectRes.headers.location).toBe(`/api/articles/${newPermalink}/preview`);
+
+      // 5. GET /api/articles/:newPermalink should return 200 OK with the updated article
+      const newUrlRes = await request(app).get(`/api/articles/${newPermalink}`);
+      expect(newUrlRes.status).toBe(200);
+      expect(newUrlRes.body.title).toBe('New Updated Article Headline for SEO Test');
+
+      // 6. GET /api/articles/redirects should map old permalink to new permalink
+      const redirectsRes = await request(app).get('/api/articles/redirects');
+      expect(redirectsRes.status).toBe(200);
+      expect(redirectsRes.body[originalPermalink]).toBe(newPermalink);
+
+      // 7. GET /api/articles/redirects/:slug should return redirect mapping details
+      const singleRedirectRes = await request(app).get(`/api/articles/redirects/${originalPermalink}`);
+      expect(singleRedirectRes.status).toBe(200);
+      expect(singleRedirectRes.body.oldPermalink).toBe(originalPermalink);
+      expect(singleRedirectRes.body.targetPermalink).toBe(newPermalink);
+      expect(singleRedirectRes.body.statusCode).toBe(301);
+    });
+
+    it('should maintain redirect history across multiple permalink updates without infinite loops', async () => {
+      const article = await articleStore.createArticle({
+        title: 'Headline Version 1',
+        content: 'Body text'
+      });
+      const slug1 = article.permalink;
+
+      // Update to Version 2
+      await request(app).put(`/api/articles/${article.id}`).send({ title: 'Headline Version 2' });
+      const slug2 = 'headline-version-2';
+
+      // Update to Version 3
+      const v3Res = await request(app).put(`/api/articles/${article.id}`).send({ title: 'Headline Version 3' });
+      const slug3 = 'headline-version-3';
+
+      expect(v3Res.body.permalink).toBe(slug3);
+      expect(v3Res.body.redirects).toContain(slug1);
+      expect(v3Res.body.redirects).toContain(slug2);
+      expect(v3Res.body.redirects).not.toContain(slug3);
+
+      // Requests to both old slugs redirect to slug3
+      const res1 = await request(app).get(`/api/articles/${slug1}`);
+      expect(res1.status).toBe(301);
+      expect(res1.headers.location).toBe(`/api/articles/${slug3}`);
+
+      const res2 = await request(app).get(`/api/articles/${slug2}`);
+      expect(res2.status).toBe(301);
+      expect(res2.headers.location).toBe(`/api/articles/${slug3}`);
+    });
   });
 });

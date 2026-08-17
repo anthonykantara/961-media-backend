@@ -12,6 +12,8 @@ const DEFAULT_SEED_ARTICLES = [
     title: "Lebanon's Tech Scene is Booming in 2026",
     permalink: 'lebanons-tech-scene-is-booming-in-2026',
     slug: 'lebanons-tech-scene-is-booming-in-2026',
+    redirects: [],
+    previousPermalinks: [],
     content: "Lebanon's vibrant tech ecosystem continues to expand rapidly with new incubators and AI startups taking center stage in Beirut.",
     summary: "A deep dive into Lebanon's growing technology sector.",
     status: 'Published',
@@ -33,6 +35,8 @@ const DEFAULT_SEED_ARTICLES = [
     title: '10 Best Rooftop Bars in Beirut This Summer',
     permalink: '10-best-rooftop-bars-in-beirut-this-summer',
     slug: '10-best-rooftop-bars-in-beirut-this-summer',
+    redirects: [],
+    previousPermalinks: [],
     content: "Discover the most breathtaking rooftop lounges across Beirut featuring panoramic Mediterranean views and signature cocktails.",
     summary: "The definitive guide to Beirut nightlife and rooftop experiences.",
     status: 'Published',
@@ -54,6 +58,8 @@ const DEFAULT_SEED_ARTICLES = [
     title: 'موسم الرياض يستقطب ملايين الزوار بفعاليات غير مسبوقة',
     permalink: 'موسم-الرياض-يستقطب-ملايين-الزوار-بفعاليات-غير-مسبوقة',
     slug: 'موسم-الرياض-يستقطب-ملايين-الزوار-بفعاليات-غير-مسبوقة',
+    redirects: [],
+    previousPermalinks: [],
     content: "تواصل العاصمة السعودية الرياض استضافة ضيوفها برعاية ترفيهية وثقافية استثنائية ضمن موسم الرياض 2026.",
     summary: "فعاليات موسم الرياض تحقق أرقاماً قياسية جديدة.",
     status: 'Published',
@@ -75,6 +81,8 @@ const DEFAULT_SEED_ARTICLES = [
     title: 'Dubai Unveils Next-Generation AI Infrastructure',
     permalink: 'dubai-unveils-next-generation-ai-infrastructure',
     slug: 'dubai-unveils-next-generation-ai-infrastructure',
+    redirects: [],
+    previousPermalinks: [],
     content: "Dubai announces a landmark investment in high-performance cloud compute and artificial intelligence hubs.",
     summary: "Dubai sets new standards for smart city and AI innovation.",
     status: 'Published',
@@ -163,14 +171,83 @@ async function getAllArticles() {
 }
 
 /**
- * Fetches a single article by its unique ID or permalink/slug.
- * @param {string} id Unique article ID or permalink/slug.
+ * Fetches a single article by its unique ID or permalink/slug/redirect.
+ * @param {string} id Unique article ID, permalink, slug, or old redirect permalink.
  * @returns {Promise<Object|null>} The article, or null if not found.
  */
 async function getArticleById(id) {
   const articles = await getAll();
-  const article = articles.find(a => a.id === id || a.permalink === id || a.slug === id);
+  if (!id) return null;
+  const lower = id.toLowerCase();
+  const article = articles.find(a =>
+    a.id === id ||
+    (a.permalink || '').toLowerCase() === lower ||
+    (a.slug || '').toLowerCase() === lower ||
+    (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lower)) ||
+    (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lower))
+  );
   return article || null;
+}
+
+/**
+ * Resolves an article lookup, determining if it matched directly or via an auto-redirect.
+ * @param {string} id Article ID, permalink, or old permalink/slug.
+ * @returns {Promise<{ article: Object, isRedirect: boolean, targetPermalink: string }|null>}
+ */
+async function findArticleWithRedirect(id) {
+  const articles = await getAll();
+  if (!id) return null;
+  const lower = id.toLowerCase();
+
+  // 1. Direct match on id, permalink, or slug
+  const directMatch = articles.find(a =>
+    a.id === id ||
+    (a.permalink || '').toLowerCase() === lower ||
+    (a.slug || '').toLowerCase() === lower
+  );
+  if (directMatch) {
+    return {
+      article: directMatch,
+      isRedirect: false,
+      targetPermalink: directMatch.permalink || directMatch.slug
+    };
+  }
+
+  // 2. Redirect match on redirects / previousPermalinks array
+  const redirectMatch = articles.find(a =>
+    (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lower)) ||
+    (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lower))
+  );
+  if (redirectMatch) {
+    return {
+      article: redirectMatch,
+      isRedirect: true,
+      targetPermalink: redirectMatch.permalink || redirectMatch.slug
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Returns a map/dictionary of all active redirects mapping old permalinks to new permalinks.
+ * @returns {Promise<Object>} Object mapping oldPermalink -> newPermalink
+ */
+async function getAllRedirects() {
+  const articles = await getAll();
+  const redirectMap = {};
+  articles.forEach(a => {
+    const currentPermalink = a.permalink || a.slug;
+    const redirects = Array.isArray(a.redirects)
+      ? a.redirects
+      : (Array.isArray(a.previousPermalinks) ? a.previousPermalinks : []);
+    redirects.forEach(oldP => {
+      if (oldP && oldP !== currentPermalink) {
+        redirectMap[oldP] = currentPermalink;
+      }
+    });
+  });
+  return redirectMap;
 }
 
 /**
@@ -199,11 +276,19 @@ async function createArticle(articleData) {
     const rawPermalink = articleData.permalink || articleData.slug || articleData.title || '';
     const permalinkVal = generatePermalink(rawPermalink);
 
+    const initialRedirects = Array.isArray(articleData.redirects)
+      ? articleData.redirects
+      : (Array.isArray(articleData.previousPermalinks) ? articleData.previousPermalinks : []);
+
+    const cleanRedirects = Array.from(new Set(initialRedirects)).filter(r => r && r !== permalinkVal);
+
     const newArticle = {
       id: articleData.id || crypto.randomUUID(),
       title: articleData.title,
       permalink: permalinkVal,
       slug: permalinkVal,
+      redirects: cleanRedirects,
+      previousPermalinks: cleanRedirects,
       content: articleData.content || '',
       summary: articleData.summary || '',
       author: articleData.author || '',
@@ -229,6 +314,7 @@ async function createArticle(articleData) {
 
 /**
  * Updates an existing article in the store.
+ * If permalink or title/slug changes, automatically records old permalink into redirects for SEO auto-redirection.
  * @param {string} id Unique article ID or permalink.
  * @param {Object} updateData Fields to update.
  * @returns {Promise<Object|null>} The updated article, or null if not found.
@@ -236,7 +322,14 @@ async function createArticle(articleData) {
 async function updateArticle(id, updateData) {
   return enqueue(async () => {
     const articles = await getAll();
-    const index = articles.findIndex(a => a.id === id || a.permalink === id || a.slug === id);
+    const lowerId = id ? id.toLowerCase() : '';
+    const index = articles.findIndex(a =>
+      a.id === id ||
+      (a.permalink || '').toLowerCase() === lowerId ||
+      (a.slug || '').toLowerCase() === lowerId ||
+      (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lowerId)) ||
+      (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lowerId))
+    );
     if (index === -1) {
       return null;
     }
@@ -255,6 +348,32 @@ async function updateArticle(id, updateData) {
       permalinkVal = existing.permalink || existing.slug || generatePermalink(existing.title || '');
     }
 
+    const existingRedirects = Array.isArray(existing.redirects)
+      ? existing.redirects
+      : (Array.isArray(existing.previousPermalinks) ? existing.previousPermalinks : []);
+
+    let updatedRedirects = [...existingRedirects];
+
+    if (Array.isArray(updateData.redirects)) {
+      updatedRedirects.push(...updateData.redirects);
+    }
+    if (Array.isArray(updateData.previousPermalinks)) {
+      updatedRedirects.push(...updateData.previousPermalinks);
+    }
+
+    const oldPermalink = existing.permalink || existing.slug;
+    if (oldPermalink && oldPermalink !== permalinkVal) {
+      if (!updatedRedirects.includes(oldPermalink)) {
+        updatedRedirects.push(oldPermalink);
+      }
+      if (existing.slug && existing.slug !== permalinkVal && !updatedRedirects.includes(existing.slug)) {
+        updatedRedirects.push(existing.slug);
+      }
+    }
+
+    // Filter out current permalinkVal to avoid infinite loop
+    updatedRedirects = Array.from(new Set(updatedRedirects)).filter(r => r && r !== permalinkVal);
+
     const imageVal = typeof updateData.imageUrl === 'string'
       ? updateData.imageUrl
       : (typeof updateData.image === 'string' ? updateData.image : (existing.imageUrl || existing.image || ''));
@@ -264,6 +383,8 @@ async function updateArticle(id, updateData) {
       title: typeof updateData.title === 'string' ? updateData.title : existing.title,
       permalink: permalinkVal,
       slug: permalinkVal,
+      redirects: updatedRedirects,
+      previousPermalinks: updatedRedirects,
       content: typeof updateData.content === 'string' ? updateData.content : existing.content,
       summary: typeof updateData.summary === 'string' ? updateData.summary : existing.summary,
       author: typeof updateData.author === 'string' ? updateData.author : existing.author,
@@ -294,7 +415,14 @@ async function updateArticle(id, updateData) {
 async function deleteArticle(id) {
   return enqueue(async () => {
     const articles = await getAll();
-    const index = articles.findIndex(a => a.id === id || a.permalink === id || a.slug === id);
+    const lowerId = id ? id.toLowerCase() : '';
+    const index = articles.findIndex(a =>
+      a.id === id ||
+      (a.permalink || '').toLowerCase() === lowerId ||
+      (a.slug || '').toLowerCase() === lowerId ||
+      (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lowerId)) ||
+      (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lowerId))
+    );
     if (index === -1) {
       return false;
     }
@@ -314,11 +442,13 @@ function formatPreviewCard(article) {
   if (!article) return null;
   const img = article.imageUrl || article.image || '';
   const permalinkVal = article.permalink || article.slug || (article.title ? generatePermalink(article.title) : '');
+  const redirectsVal = Array.isArray(article.redirects) ? article.redirects : (Array.isArray(article.previousPermalinks) ? article.previousPermalinks : []);
   return {
     id: article.id,
     title: article.title || '',
     permalink: permalinkVal,
     slug: permalinkVal,
+    redirects: redirectsVal,
     summary: article.summary || '',
     image: img,
     imageUrl: img,
@@ -348,6 +478,8 @@ module.exports = {
   getAllArticles,
   getArticleById,
   getArticleByPermalink,
+  findArticleWithRedirect,
+  getAllRedirects,
   createArticle,
   updateArticle,
   deleteArticle,

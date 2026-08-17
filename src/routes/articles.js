@@ -37,6 +37,16 @@ function validateArticleData(data, isUpdate = false) {
     }
   });
 
+  const arrayOrStringFields = ['redirects', 'previousPermalinks'];
+  arrayOrStringFields.forEach(field => {
+    if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
+      if (!Array.isArray(data[field]) && typeof data[field] !== 'string') {
+        const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+        errors.push(`${fieldName} must be an array or a string.`);
+      }
+    }
+  });
+
   const numericOrStringFields = ['views', 'shares'];
   numericOrStringFields.forEach(field => {
     if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
@@ -78,10 +88,22 @@ router.get('/feed', async (req, res, next) => {
       articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
     }
     if (permalink) {
-      articles = articles.filter(a => (a.permalink || '').toLowerCase() === permalink.toLowerCase() || (a.slug || '').toLowerCase() === permalink.toLowerCase());
+      const pLower = permalink.toLowerCase();
+      articles = articles.filter(a =>
+        (a.permalink || '').toLowerCase() === pLower ||
+        (a.slug || '').toLowerCase() === pLower ||
+        (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === pLower)) ||
+        (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === pLower))
+      );
     }
     if (slug) {
-      articles = articles.filter(a => (a.slug || '').toLowerCase() === slug.toLowerCase() || (a.permalink || '').toLowerCase() === slug.toLowerCase());
+      const sLower = slug.toLowerCase();
+      articles = articles.filter(a =>
+        (a.slug || '').toLowerCase() === sLower ||
+        (a.permalink || '').toLowerCase() === sLower ||
+        (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === sLower)) ||
+        (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === sLower))
+      );
     }
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
@@ -105,6 +127,41 @@ router.get('/feed', async (req, res, next) => {
 
     const previewCards = articles.map(a => articleStore.formatPreviewCard(a));
     return res.status(200).json(previewCards);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/articles/redirects
+ * Returns all active article permalink auto-redirects map.
+ */
+router.get('/redirects', async (req, res, next) => {
+  try {
+    const redirects = await articleStore.getAllRedirects();
+    return res.status(200).json(redirects);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/articles/redirects/:slug
+ * Resolves redirect target for a given old slug or permalink.
+ */
+router.get('/redirects/:slug', async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const result = await articleStore.findArticleWithRedirect(slug);
+    if (!result || !result.isRedirect) {
+      return res.status(404).json({ error: `No redirect found for permalink '${slug}'.` });
+    }
+    return res.status(200).json({
+      oldPermalink: slug,
+      targetPermalink: result.targetPermalink,
+      statusCode: 301,
+      articleId: result.article.id
+    });
   } catch (err) {
     next(err);
   }
@@ -136,10 +193,22 @@ router.get('/', async (req, res, next) => {
       articles = articles.filter(a => (a.language || '').toLowerCase() === language.toLowerCase());
     }
     if (permalink) {
-      articles = articles.filter(a => (a.permalink || '').toLowerCase() === permalink.toLowerCase() || (a.slug || '').toLowerCase() === permalink.toLowerCase());
+      const pLower = permalink.toLowerCase();
+      articles = articles.filter(a =>
+        (a.permalink || '').toLowerCase() === pLower ||
+        (a.slug || '').toLowerCase() === pLower ||
+        (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === pLower)) ||
+        (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === pLower))
+      );
     }
     if (slug) {
-      articles = articles.filter(a => (a.slug || '').toLowerCase() === slug.toLowerCase() || (a.permalink || '').toLowerCase() === slug.toLowerCase());
+      const sLower = slug.toLowerCase();
+      articles = articles.filter(a =>
+        (a.slug || '').toLowerCase() === sLower ||
+        (a.permalink || '').toLowerCase() === sLower ||
+        (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === sLower)) ||
+        (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === sLower))
+      );
     }
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
@@ -169,16 +238,31 @@ router.get('/', async (req, res, next) => {
 
 /**
  * GET /api/articles/:id/preview
- * Returns single article formatted for preview card
+ * Returns single article formatted for preview card.
+ * Performs SEO 301 Moved Permanently redirect if accessed via an old/changed permalink.
  */
 router.get('/:id/preview', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const article = await articleStore.getArticleById(id);
-    if (!article) {
+    const result = await articleStore.findArticleWithRedirect(id);
+    if (!result) {
       return res.status(404).json({ error: `Article with ID ${id} not found.` });
     }
-    return res.status(200).json(articleStore.formatPreviewCard(article));
+
+    if (result.isRedirect) {
+      if (req.query.noRedirect === 'true') {
+        return res.status(200).json({
+          redirect: true,
+          statusCode: 301,
+          targetPermalink: result.targetPermalink,
+          card: articleStore.formatPreviewCard(result.article)
+        });
+      }
+      res.set('X-Redirect-Reason', 'Permalink changed - SEO 301 Auto-Redirect');
+      return res.redirect(301, `/api/articles/${result.targetPermalink}/preview`);
+    }
+
+    return res.status(200).json(articleStore.formatPreviewCard(result.article));
   } catch (err) {
     next(err);
   }
@@ -186,16 +270,31 @@ router.get('/:id/preview', async (req, res, next) => {
 
 /**
  * GET /api/articles/:id
- * Returns a single article by ID
+ * Returns a single article by ID or permalink.
+ * Performs SEO 301 Moved Permanently redirect if accessed via an old/changed permalink.
  */
 router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const article = await articleStore.getArticleById(id);
-    if (!article) {
+    const result = await articleStore.findArticleWithRedirect(id);
+    if (!result) {
       return res.status(404).json({ error: `Article with ID ${id} not found.` });
     }
-    return res.status(200).json(article);
+
+    if (result.isRedirect) {
+      if (req.query.noRedirect === 'true') {
+        return res.status(200).json({
+          redirect: true,
+          statusCode: 301,
+          targetPermalink: result.targetPermalink,
+          article: result.article
+        });
+      }
+      res.set('X-Redirect-Reason', 'Permalink changed - SEO 301 Auto-Redirect');
+      return res.redirect(301, `/api/articles/${result.targetPermalink}`);
+    }
+
+    return res.status(200).json(result.article);
   } catch (err) {
     next(err);
   }

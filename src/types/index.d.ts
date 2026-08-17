@@ -8,6 +8,8 @@ export interface Post {
   title: string;
   permalink?: string;
   slug?: string;
+  redirects?: string[];
+  previousPermalinks?: string[];
   content: string;
   summary: string;
   author: string;
@@ -32,6 +34,8 @@ export interface PreviewCard {
   title: string;
   permalink?: string;
   slug?: string;
+  redirects?: string[];
+  previousPermalinks?: string[];
   summary: string;
   image: string;
   imageUrl: string;
