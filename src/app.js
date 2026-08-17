@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const articlesRouter = require('./routes/articles');
+const expressCreationRouter = require('./routes/expressCreation');
 
 // Load environment variables
 dotenv.config();
@@ -48,7 +49,9 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 // Register routes
+app.use('/api/articles/express-creation', expressCreationRouter);
 app.use('/api/articles', articlesRouter);
+app.use('/api/express-creation', expressCreationRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
