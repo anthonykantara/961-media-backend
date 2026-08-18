@@ -3,8 +3,9 @@ const { getSocialSecrets } = require('../services/secrets');
 
 /**
  * Slack Webhook Dispatch Worker (#ig-staging):
- * Uploads all carousel_N.png files via files.uploadV2 and sends ig_caption
+ * Uploads all carousel_N.png files concurrently via files.uploadV2 and sends ig_caption
  * in a formatted markdown code block (` ```ig_caption``` `) using chat.postMessage.
+ * Explicitly reports failure details if any uploads fail.
  * 
  * @param {object} article Article object.
  * @param {object} [providedSecrets] Optional secrets object.
@@ -13,7 +14,7 @@ const { getSocialSecrets } = require('../services/secrets');
  */
 async function slackDispatch(article, providedSecrets = null, options = {}) {
   const secrets = providedSecrets || await getSocialSecrets(options);
-  const { botToken, channel } = secrets.slack;
+  const { botToken, channel } = secrets.slack || {};
   const targetChannel = options.channel || channel || '#ig-staging';
 
   if (!botToken && !options.slackClient) {
@@ -25,35 +26,40 @@ async function slackDispatch(article, providedSecrets = null, options = {}) {
   // Extract carousel files
   const carouselFiles = options.carouselFiles || article.carouselFiles || article.carousel_files || article.carouselImages || [];
 
-  const uploadedFiles = [];
-
-  // 1. Upload all carousel_N.png files via files.uploadV2
-  for (const fileInput of carouselFiles) {
-    try {
-      let uploadResult;
-      if (options.uploadV2Mock) {
-        uploadResult = await options.uploadV2Mock({ channel_id: targetChannel, fileInput });
-      } else if (typeof fileInput === 'string') {
-        uploadResult = await client.files.uploadV2({
-          channel_id: targetChannel,
-          file: fileInput,
-          filename: fileInput.split('/').pop() || 'carousel_N.png'
-        });
-      } else if (Buffer.isBuffer(fileInput) || typeof fileInput === 'object') {
-        uploadResult = await client.files.uploadV2({
-          channel_id: targetChannel,
-          file: fileInput.buffer || fileInput,
-          filename: fileInput.filename || 'carousel_N.png'
-        });
-      }
-
-      if (uploadResult) {
-        uploadedFiles.push(uploadResult);
-      }
-    } catch (err) {
-      console.error(`Failed to upload carousel file ${fileInput}:`, err.message);
+  // 1. Upload all carousel files concurrently
+  const uploadPromises = carouselFiles.map(async (fileInput) => {
+    if (options.uploadV2Mock) {
+      return await options.uploadV2Mock({ channel_id: targetChannel, fileInput });
+    } else if (typeof fileInput === 'string') {
+      return await client.files.uploadV2({
+        channel_id: targetChannel,
+        file: fileInput,
+        filename: fileInput.split('/').pop() || 'carousel_N.png'
+      });
+    } else if (Buffer.isBuffer(fileInput) || typeof fileInput === 'object') {
+      return await client.files.uploadV2({
+        channel_id: targetChannel,
+        file: fileInput.buffer || fileInput,
+        filename: fileInput.filename || 'carousel_N.png'
+      });
     }
-  }
+    throw new Error(`Invalid file input format: ${typeof fileInput}`);
+  });
+
+  const uploadResults = await Promise.allSettled(uploadPromises);
+  const uploadedFiles = [];
+  const uploadErrors = [];
+
+  uploadResults.forEach((res, index) => {
+    if (res.status === 'fulfilled' && res.value) {
+      uploadedFiles.push(res.value);
+    } else if (res.status === 'rejected') {
+      const fileIdentifier = typeof carouselFiles[index] === 'string' ? carouselFiles[index] : `file_${index + 1}`;
+      const errDetail = res.reason && res.reason.message ? res.reason.message : String(res.reason);
+      console.error(`Slack Carousel Upload Failure [${fileIdentifier}]:`, errDetail);
+      uploadErrors.push({ file: fileIdentifier, error: errDetail });
+    }
+  });
 
   // 2. Format ig_caption in a markdown code block (` ```ig_caption``` `)
   const igCaption = article.ig_caption || article.igCaption || article.summary || article.title || '';
@@ -70,9 +76,10 @@ async function slackDispatch(article, providedSecrets = null, options = {}) {
   }
 
   return {
-    success: true,
+    success: uploadErrors.length === 0,
     channel: targetChannel,
     uploadedFiles,
+    uploadErrors,
     messageTs: messageResult ? messageResult.ts : null,
     formattedMessage: formattedCodeBlock
   };

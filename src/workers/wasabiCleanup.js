@@ -5,6 +5,7 @@ const { getSocialSecrets } = require('../services/secrets');
  * Wasabi Storage Cleanup Worker:
  * Automatically purges unapproved temporary social media images and draft assets
  * from Wasabi Cloud Storage upon publication.
+ * Scans prefixes concurrently and reports failures explicitly.
  * 
  * @param {object} article Article object.
  * @param {object} [providedSecrets] Optional secrets object.
@@ -13,10 +14,9 @@ const { getSocialSecrets } = require('../services/secrets');
  */
 async function wasabiCleanup(article, providedSecrets = null, options = {}) {
   const secrets = providedSecrets || await getSocialSecrets(options);
-  const wasabi = secrets.wasabi;
+  const wasabi = secrets.wasabi || {};
 
   const articleId = article.id || article._id;
-
   const keysToDelete = new Set(options.keysToDelete || []);
 
   // Collect explicitly referenced temporary/draft assets
@@ -31,7 +31,6 @@ async function wasabiCleanup(article, providedSecrets = null, options = {}) {
     if (Array.isArray(arr)) {
       arr.forEach(k => {
         if (typeof k === 'string') {
-          // Extract key if full URL or key string
           const cleanKey = k.replace(/^https?:\/\/[^\/]+\//, '');
           keysToDelete.add(cleanKey);
         }
@@ -49,32 +48,37 @@ async function wasabiCleanup(article, providedSecrets = null, options = {}) {
   });
 
   const bucket = options.bucket || wasabi.bucket || '961-media-drafts';
+  const scanErrors = [];
 
-  // Discover assets by prefix if articleId is present
+  // Discover assets by prefix concurrently if articleId is present
   if (articleId && !options.skipPrefixScan) {
     const prefixes = [`drafts/${articleId}/`, `temp/${articleId}/`];
-    for (const prefix of prefixes) {
-      try {
-        const listCmd = new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: prefix
+    const scanPromises = prefixes.map(async (prefix) => {
+      const listCmd = new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix
+      });
+      const listRes = await s3Client.send(listCmd);
+      return { prefix, items: listRes && listRes.Contents ? listRes.Contents : [] };
+    });
+
+    const scanResults = await Promise.allSettled(scanPromises);
+    scanResults.forEach((res, index) => {
+      if (res.status === 'fulfilled' && res.value) {
+        res.value.items.forEach(item => {
+          if (item.Key) keysToDelete.add(item.Key);
         });
-        const listRes = await s3Client.send(listCmd);
-        if (listRes && listRes.Contents) {
-          listRes.Contents.forEach(item => {
-            if (item.Key) {
-              keysToDelete.add(item.Key);
-            }
-          });
-        }
-      } catch (err) {
-        // Log prefix list error if any
+      } else if (res.status === 'rejected') {
+        const errDetail = res.reason && res.reason.message ? res.reason.message : String(res.reason);
+        console.error(`Wasabi prefix scan failure for [${prefixes[index]}]:`, errDetail);
+        scanErrors.push({ prefix: prefixes[index], error: errDetail });
       }
-    }
+    });
   }
 
   const keysList = Array.from(keysToDelete);
   const deletedKeys = [];
+  const deleteErrors = [];
 
   if (keysList.length > 0) {
     if (options.mockDelete) {
@@ -94,23 +98,33 @@ async function wasabiCleanup(article, providedSecrets = null, options = {}) {
           deletedKeys.push(...keysList);
         }
       } catch (err) {
-        // Fallback to deleting individually if bulk delete fails
-        for (const key of keysList) {
-          try {
-            await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-            deletedKeys.push(key);
-          } catch (e) {
-            console.error(`Failed to delete Wasabi key ${key}:`, e.message);
+        console.error('Bulk Wasabi deletion failed, attempting individual delete fallback:', err.message);
+        // Fallback to deleting individually concurrently if bulk delete fails
+        const singleDeletePromises = keysList.map(async (key) => {
+          await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+          return key;
+        });
+
+        const singleResults = await Promise.allSettled(singleDeletePromises);
+        singleResults.forEach((res, index) => {
+          if (res.status === 'fulfilled') {
+            deletedKeys.push(res.value);
+          } else {
+            const errDetail = res.reason && res.reason.message ? res.reason.message : String(res.reason);
+            console.error(`Failed to delete Wasabi key ${keysList[index]}:`, errDetail);
+            deleteErrors.push({ key: keysList[index], error: errDetail });
           }
-        }
+        });
       }
     }
   }
 
   return {
-    success: true,
+    success: scanErrors.length === 0 && deleteErrors.length === 0,
     bucket,
-    deletedKeys
+    deletedKeys,
+    scanErrors,
+    deleteErrors
   };
 }
 
