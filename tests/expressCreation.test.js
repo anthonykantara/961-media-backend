@@ -51,6 +51,42 @@ describe('Express Creation Image Manipulation Engine & API', () => {
       expect(result.cdn_urls.featured).toBe(result.featured_image.url);
       expect(result.cdn_urls.carousel).toHaveLength(4);
     });
+
+    it('should support direct buffer enhancement, featured rendering, and carousel slide rendering', async () => {
+      const sharp = require('sharp');
+      const testBuffer = await sharp({ create: { width: 500, height: 500, channels: 3, background: { r: 100, g: 100, b: 100 } } }).png().toBuffer();
+
+      // Test enhancement pass
+      const enhanced = await imageEngine.enhanceImage(testBuffer);
+      expect(Buffer.isBuffer(enhanced)).toBe(true);
+
+      // Test featured image rendering (1200x630)
+      const featured = await imageEngine.renderFeaturedImage(enhanced, 'Test [Highlight] Headline');
+      const featuredMeta = await sharp(featured).metadata();
+      expect(featuredMeta.width).toBe(1200);
+      expect(featuredMeta.height).toBe(630);
+
+      // Test carousel deck rendering (4 x 1080x1350)
+      const slides = await imageEngine.renderCarouselDeck(enhanced, ['Slide [1]', 'Slide [2]', 'Slide [3]', 'Slide [4]']);
+      expect(slides).toHaveLength(4);
+      const slideMeta = await sharp(slides[0]).metadata();
+      expect(slideMeta.width).toBe(1080);
+      expect(slideMeta.height).toBe(1350);
+    });
+
+    it('should gracefully handle base64 image data inputs and fallback on error', async () => {
+      const base64Image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const payload = {
+        headline: 'Base64 [Input Test]',
+        image: base64Image,
+        carousel_slides: ['Slide 1', 'Slide 2', 'Slide 3', 'Slide 4']
+      };
+
+      const result = await imageEngine.processExpressCreation(payload);
+      expect(result.status).toBe('success');
+      expect(result.featured_image.dimensions).toEqual({ width: 1200, height: 630 });
+      expect(result.carousel_slides).toHaveLength(4);
+    });
   });
 
   describe('POST /api/express-creation', () => {
