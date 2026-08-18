@@ -88,28 +88,27 @@ async function claimPendingTasks(limit = 10) {
 
   if (pool) {
     try {
-      const selectSql = `
-        SELECT id FROM dispatch_queue
-        WHERE status IN ('pending', 'retry_scheduled')
-          AND next_run_at <= $1
-          AND attempts < max_attempts
-        ORDER BY created_at ASC
-        LIMIT $2
-        FOR UPDATE SKIP LOCKED;
+      const sql = `
+        WITH ready_tasks AS (
+          SELECT id FROM dispatch_queue
+          WHERE status IN ('pending', 'retry_scheduled')
+            AND next_run_at <= $1
+            AND attempts < max_attempts
+          ORDER BY created_at ASC
+          LIMIT $2
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE dispatch_queue q
+        SET status = 'processing',
+            attempts = q.attempts + 1,
+            updated_at = $1
+        FROM ready_tasks rt
+        WHERE q.id = rt.id
+        RETURNING q.*;
       `;
-      const selectRes = await pool.query(selectSql, [now, limit]);
-      if (selectRes && selectRes.rows && selectRes.rows.length > 0) {
-        const ids = selectRes.rows.map(r => r.id);
-        const updateSql = `
-          UPDATE dispatch_queue
-          SET status = 'processing',
-              attempts = attempts + 1,
-              updated_at = $1
-          WHERE id = ANY($2::uuid[])
-          RETURNING *;
-        `;
-        const updateRes = await pool.query(updateSql, [now, ids]);
-        return (updateRes.rows || []).map(normalizeTaskRecord);
+      const updateRes = await pool.query(sql, [now, limit]);
+      if (updateRes && updateRes.rows) {
+        return updateRes.rows.map(normalizeTaskRecord);
       }
       return [];
     } catch (err) {

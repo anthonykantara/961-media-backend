@@ -188,6 +188,42 @@ describe('Database Dispatch Queue & Exponential Retry Pipeline', () => {
       expect(finalTask.attempts).toBe(1);
       expect(finalTask.last_error).toContain('Persistent Network Timeout');
     });
+
+    it('should handle worker results returning success=false as failures', async () => {
+      const article = await articleStore.createArticle({
+        title: 'Partial Failure Article',
+        content: 'Testing worker success=false handling.'
+      });
+
+      const mockFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'fb_123' })
+      });
+
+      const task = await queueStore.enqueueTask({
+        articleId: article.id,
+        options: {
+          secrets: mockSecrets,
+          facebookOptions: { fetch: mockFetch },
+          linkedinOptions: { fetch: mockFetch },
+          slackOptions: {
+            carouselFiles: ['failed_file.png'],
+            uploadV2Mock: jest.fn().mockRejectedValue(new Error('Slack rate limit exceeded')),
+            postMessageMock: jest.fn().mockResolvedValue({ ts: '123' })
+          },
+          wasabiOptions: { mockDelete: true, skipPrefixScan: true }
+        },
+        maxAttempts: 1
+      });
+
+      const run = await processNextTasks();
+      expect(run.length).toBe(1);
+
+      const finalTask = await queueStore.getTaskById(task.id);
+      expect(finalTask.status).toBe('failed');
+      expect(finalTask.last_error).toContain('slack worker failed: failed_file.png: Slack rate limit exceeded');
+    });
   });
 
   describe('4. Explicit Network Request Timeouts & Safe Parsing', () => {

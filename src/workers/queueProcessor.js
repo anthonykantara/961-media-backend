@@ -21,11 +21,36 @@ async function processNextTasks() {
     try {
       const result = await dispatchAll(task.article_id, task.options || {});
 
-      // Check if any distribution worker in dispatchAll rejected
-      const failures = Object.entries(result.dispatches || {}).filter(([_, v]) => v && v.status === 'rejected');
+      // Check if any distribution worker in dispatchAll rejected or reported success = false
+      const failures = Object.entries(result.dispatches || {}).filter(([_, v]) => {
+        if (!v) return false;
+        if (v.status === 'rejected') return true;
+        if (v.status === 'fulfilled' && v.value && v.value.success === false) return true;
+        return false;
+      });
 
       if (failures.length > 0) {
-        const errMsg = failures.map(([name, res]) => `${name} worker failed: ${res.reason || 'Unknown error'}`).join('; ');
+        const errMsg = failures.map(([name, res]) => {
+          if (res.status === 'rejected') {
+            return `${name} worker failed: ${res.reason || 'Unknown error'}`;
+          }
+          const val = res.value || {};
+          const details = [];
+          if (Array.isArray(val.uploadErrors) && val.uploadErrors.length > 0) {
+            details.push(val.uploadErrors.map(e => `${e.file}: ${e.error}`).join(', '));
+          }
+          if (Array.isArray(val.scanErrors) && val.scanErrors.length > 0) {
+            details.push(val.scanErrors.map(e => `${e.prefix}: ${e.error}`).join(', '));
+          }
+          if (Array.isArray(val.deleteErrors) && val.deleteErrors.length > 0) {
+            details.push(val.deleteErrors.map(e => `${e.key}: ${e.error}`).join(', '));
+          }
+          if (details.length === 0 && val.error) {
+            details.push(val.error);
+          }
+          return `${name} worker failed: ${details.join('; ') || 'Execution unsuccessful'}`;
+        }).join('; ');
+
         const updatedTask = await queueStore.markTaskFailed(
           task.id,
           new Error(errMsg),
