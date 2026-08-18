@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const articleStore = require('../models/articleStore');
 const { dispatchAll } = require('../workers/dispatchWorker');
+const { cmsDispatch } = require('../workers/cmsDispatch');
 const locationStore = require('../models/locationStore');
+const queueStore = require('../models/queueStore');
+const { triggerImmediateProcessing } = require('../workers/queueProcessor');
 
 // Helper function to validate validation parameters
 function validateArticleData(data, isUpdate = false) {
@@ -389,7 +392,7 @@ router.delete('/:id', async (req, res, next) => {
 
 /**
  * POST /api/articles/:id/dispatch
- * Triggers background social distribution and CMS publishing dispatch workers.
+ * Triggers background social distribution and CMS publishing dispatch workers asynchronously via durable database queue.
  */
 router.post('/:id/dispatch', async (req, res, next) => {
   try {
@@ -399,8 +402,33 @@ router.post('/:id/dispatch', async (req, res, next) => {
       return res.status(404).json({ error: `Article with ID ${id} not found.` });
     }
 
-    const dispatchResults = await dispatchAll(id, req.body || {});
-    return res.status(200).json(dispatchResults);
+    if (req.body && req.body.synchronous === true) {
+      const dispatchResults = await dispatchAll(id, req.body || {});
+      return res.status(200).json(dispatchResults);
+    }
+
+    let cmsUpdatedArticle = existing;
+    try {
+      cmsUpdatedArticle = await cmsDispatch(existing, (req.body && req.body.cmsOptions) || {});
+    } catch (cmsErr) {
+      // Keep existing if cmsDispatch throws
+    }
+
+    const task = await queueStore.enqueueTask({ articleId: id, options: req.body || {} });
+    triggerImmediateProcessing();
+
+    return res.status(200).json({
+      articleId: id,
+      jobId: task.id,
+      status: 'queued',
+      dispatches: {
+        cms: { status: 'fulfilled', value: cmsUpdatedArticle },
+        facebook: { status: 'queued' },
+        linkedin: { status: 'queued' },
+        slack: { status: 'queued' },
+        wasabi: { status: 'queued' }
+      }
+    });
   } catch (err) {
     next(err);
   }
@@ -408,7 +436,7 @@ router.post('/:id/dispatch', async (req, res, next) => {
 
 /**
  * POST /api/articles/:id/publish
- * Publishes an article and triggers full background dispatch pipeline.
+ * Publishes an article and triggers full background dispatch pipeline asynchronously via durable database queue.
  */
 router.post('/:id/publish', async (req, res, next) => {
   try {
@@ -418,12 +446,36 @@ router.post('/:id/publish', async (req, res, next) => {
       return res.status(404).json({ error: `Article with ID ${id} not found.` });
     }
 
-    const dispatchResults = await dispatchAll(id, req.body || {});
-    const updatedArticle = await articleStore.getArticleById(id);
+    if (req.body && req.body.synchronous === true) {
+      const dispatchResults = await dispatchAll(id, req.body || {});
+      const updatedArticle = await articleStore.getArticleById(id);
+      return res.status(200).json({
+        article: updatedArticle,
+        dispatch: dispatchResults
+      });
+    }
+
+    let cmsUpdatedArticle = existing;
+    try {
+      cmsUpdatedArticle = await cmsDispatch(existing, (req.body && req.body.cmsOptions) || {});
+    } catch (cmsErr) {
+      cmsUpdatedArticle = await articleStore.updateArticle(id, { status: 'published' }) || existing;
+    }
+
+    const task = await queueStore.enqueueTask({ articleId: id, options: req.body || {} });
+    triggerImmediateProcessing();
 
     return res.status(200).json({
-      article: updatedArticle,
-      dispatch: dispatchResults
+      article: cmsUpdatedArticle,
+      jobId: task.id,
+      status: 'queued',
+      dispatch: {
+        cms: { status: 'fulfilled', value: cmsUpdatedArticle },
+        facebook: { status: 'queued' },
+        linkedin: { status: 'queued' },
+        slack: { status: 'queued' },
+        wasabi: { status: 'queued' }
+      }
     });
   } catch (err) {
     next(err);

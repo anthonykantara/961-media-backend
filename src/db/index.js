@@ -33,9 +33,13 @@ async function runMigrations() {
     return false;
   }
   try {
-    const migrationPath = path.join(__dirname, '../../migrations/001_create_content_pipeline.sql');
-    const sql = await fs.readFile(migrationPath, 'utf8');
-    await activePool.query(sql);
+    const migrationsDir = path.join(__dirname, '../../migrations');
+    const files = await fs.readdir(migrationsDir);
+    const sqlFiles = files.filter(f => f.endsWith('.sql')).sort();
+    for (const file of sqlFiles) {
+      const sql = await fs.readFile(path.join(migrationsDir, file), 'utf8');
+      await activePool.query(sql);
+    }
     return true;
   } catch (err) {
     console.error('Migration execution failed:', err.message);
