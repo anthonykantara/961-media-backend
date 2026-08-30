@@ -7,6 +7,7 @@ const languagesRouter = require('./routes/languages');
 const locationsRouter = require('./routes/locations');
 const regionsRouter = require('./routes/regions');
 const expressCreationRouter = require('./routes/expressCreation');
+const adsRouter = require('./routes/ads');
 
 // Load environment variables
 dotenv.config();
@@ -60,6 +61,8 @@ app.use('/api/languages', languagesRouter);
 app.use('/api/locations', locationsRouter);
 app.use('/api/regions', regionsRouter);
 app.use('/api/express-creation', expressCreationRouter);
+app.use('/api/v1', adsRouter);
+app.use('/api', adsRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
