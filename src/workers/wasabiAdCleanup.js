@@ -1,6 +1,8 @@
 const { S3Client, ListObjectsV2Command, CopyObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const secretsManager = require('../services/secretsManager');
 
+let cleanupTimer = null;
+
 async function getS3Client() {
   const credentials = await secretsManager.getWasabiCredentials();
   const isMock = !credentials.accessKeyId || credentials.accessKeyId === 'mock-wasabi-access-key' || process.env.NODE_ENV === 'test';
@@ -115,7 +117,39 @@ async function migrateAdAssetsToPermanent(sessionId, campaignId, options = {}) {
   return { success: errors.length === 0, migratedKeys, errors };
 }
 
+/**
+ * Starts active background scheduler for purging expired temporary assets
+ */
+function startWasabiAdCleanupScheduler(intervalMs = 3600000, maxAgeHours = 24) {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+  }
+  cleanupTimer = setInterval(async () => {
+    try {
+      await cleanTemporaryAdAssets(maxAgeHours);
+    } catch (err) {
+      console.error('Wasabi temporary asset cleanup background task error:', err.message);
+    }
+  }, intervalMs);
+  if (cleanupTimer.unref) {
+    cleanupTimer.unref();
+  }
+  return cleanupTimer;
+}
+
+/**
+ * Stops background cleanup scheduler
+ */
+function stopWasabiAdCleanupScheduler() {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
+}
+
 module.exports = {
   cleanTemporaryAdAssets,
-  migrateAdAssetsToPermanent
+  migrateAdAssetsToPermanent,
+  startWasabiAdCleanupScheduler,
+  stopWasabiAdCleanupScheduler
 };

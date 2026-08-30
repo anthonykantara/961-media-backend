@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const adsStore = require('../models/adsStore');
 const { uploadToWasabi } = require('../services/wasabiService');
-const { migrateAdAssetsToPermanent } = require('../workers/wasabiAdCleanup');
+const { migrateAdAssetsToPermanent, cleanTemporaryAdAssets } = require('../workers/wasabiAdCleanup');
 const { createAdsSlackChannel } = require('../services/slackAdService');
 
 /**
@@ -31,8 +31,8 @@ router.post('/campaigns/lead', async (req, res, next) => {
     }
 
     const result = await adsStore.createLeadCampaign(leadData);
-    
-    // Optionally trigger Slack channel prep
+
+    // Trigger Slack channel prep asynchronously
     if (result.advertiser && result.advertiser.companySlug) {
       createAdsSlackChannel(result.advertiser.companySlug, {
         brandName: result.advertiser.brandName,
@@ -65,7 +65,7 @@ router.post('/campaigns/upload', async (req, res, next) => {
     const effectiveSessionId = sessionId || `sess_${Date.now()}`;
     const cleanFileName = fileName || `asset_${Date.now()}.png`;
 
-    const wasabiKey = campaignId 
+    const wasabiKey = campaignId
       ? `campaigns/permanent/${campaignId}/${cleanFileName}`
       : `campaigns/temporary/${effectiveSessionId}/${cleanFileName}`;
 
@@ -117,6 +117,13 @@ router.post('/webhooks/payment', async (req, res, next) => {
       return res.status(400).json({ error: 'Bad Request', message: 'Transaction status not successful.' });
     }
 
+    // Optional webhook signature check
+    const webhookSecret = process.env.PAYMENT_WEBHOOK_SECRET;
+    const signature = req.headers['x-webhook-signature'];
+    if (webhookSecret && signature && signature !== webhookSecret) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid payment webhook signature.' });
+    }
+
     const campaign = await adsStore.processPaymentAndActivateCampaign(payload);
 
     // Migrate Wasabi assets from temporary to permanent
@@ -124,18 +131,21 @@ router.post('/webhooks/payment', async (req, res, next) => {
       await migrateAdAssetsToPermanent(campaign.sessionId, campaign.id);
     }
 
-    // Trigger Slack channel creation
+    // Trigger Slack channel creation & notification
     if (campaign) {
       const store = await adsStore.getStore();
       const advertiser = store.advertisers.find(a => a.id === campaign.advertiserId);
       if (advertiser && advertiser.companySlug) {
-        await createAdsSlackChannel(advertiser.companySlug, {
+        const slackRes = await createAdsSlackChannel(advertiser.companySlug, {
           brandName: advertiser.brandName,
           totalAmount: campaign.totalAmount,
           objective: campaign.objective,
           status: campaign.status,
           email: payload.email
         });
+        if (slackRes && slackRes.channelName) {
+          await adsStore.updateCampaignStatus(campaign.id, campaign.status, { slackChannel: slackRes.channelName });
+        }
       }
     }
 
@@ -197,11 +207,16 @@ router.post('/campaigns/workspace/:token/messages', async (req, res, next) => {
 
 /**
  * GET /api/v1/admin/leads-and-campaigns
- * Admin view sorting opportunities by budget priority and state
+ * Admin view sorting opportunities by budget priority and state with filtering support
  */
 router.get('/admin/leads-and-campaigns', async (req, res, next) => {
   try {
-    const data = await adsStore.getAllLeadsAndCampaigns();
+    const filters = {
+      status: req.query.status,
+      country: req.query.country,
+      search: req.query.search
+    };
+    const data = await adsStore.getAllLeadsAndCampaigns(filters);
     res.status(200).json({
       success: true,
       totalCount: data.length,
@@ -219,14 +234,14 @@ router.get('/admin/leads-and-campaigns', async (req, res, next) => {
 router.post('/admin/campaigns/:id/slack-channel', async (req, res, next) => {
   try {
     const campaignId = req.params.id;
-    const store = await adsStore.getStore();
-    const campaign = store.campaigns.find(c => c.id === campaignId || c.accessToken === campaignId);
+    const workspace = await adsStore.getCampaignByToken(campaignId);
 
-    if (!campaign) {
+    if (!workspace || !workspace.campaign) {
       return res.status(404).json({ error: 'Not Found', message: 'Campaign not found.' });
     }
 
-    const advertiser = store.advertisers.find(a => a.id === campaign.advertiserId);
+    const campaign = workspace.campaign;
+    const advertiser = workspace.advertiser;
     const companySlug = advertiser ? advertiser.companySlug : 'company';
 
     const slackResult = await createAdsSlackChannel(companySlug, {
@@ -236,10 +251,32 @@ router.post('/admin/campaigns/:id/slack-channel', async (req, res, next) => {
       status: campaign.status
     });
 
+    if (slackResult && slackResult.channelName) {
+      await adsStore.updateCampaignStatus(campaign.id, campaign.status, { slackChannel: slackResult.channelName });
+    }
+
     res.status(200).json({
       success: true,
       slackChannel: slackResult.channelName,
       details: slackResult
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/v1/admin/cleanup-temp-assets
+ * Manually trigger Wasabi temporary creative asset cleanup
+ */
+router.post('/admin/cleanup-temp-assets', async (req, res, next) => {
+  try {
+    const maxAgeHours = req.body && req.body.maxAgeHours ? parseFloat(req.body.maxAgeHours) : 24;
+    const result = await cleanTemporaryAdAssets(maxAgeHours);
+    res.status(200).json({
+      success: result.success,
+      deletedKeys: result.deletedKeys,
+      errors: result.errors
     });
   } catch (err) {
     next(err);
