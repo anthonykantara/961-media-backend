@@ -11,6 +11,8 @@ const { facebookDispatch } = require('../src/workers/facebookDispatch');
 const { linkedinDispatch } = require('../src/workers/linkedinDispatch');
 const { slackDispatch } = require('../src/workers/slackDispatch');
 const { wasabiCleanup } = require('../src/workers/wasabiCleanup');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('Database Dispatch Queue & Exponential Retry Pipeline', () => {
   const mockSecrets = {
@@ -42,6 +44,7 @@ describe('Database Dispatch Queue & Exponential Retry Pipeline', () => {
       const startTime = Date.now();
       const res = await request(app)
         .post(`/api/articles/${article.id}/publish`)
+        .set(adminHeaders)
         .send({
           secrets: mockSecrets,
           facebookOptions: { fetch: jest.fn().mockImplementation(() => new Promise(r => setTimeout(r, 2000))) }, // Slow external call
@@ -72,6 +75,7 @@ describe('Database Dispatch Queue & Exponential Retry Pipeline', () => {
       const startTime = Date.now();
       const res = await request(app)
         .post(`/api/articles/${article.id}/dispatch`)
+        .set(adminHeaders)
         .send({ secrets: mockSecrets });
       const responseTime = Date.now() - startTime;
 

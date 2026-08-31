@@ -6,6 +6,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const articleStore = require('../src/models/articleStore');
 const locationStore = require('../src/models/locationStore');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('CMS Dashboard & Web Frontend Full Synchronization', () => {
   beforeEach(async () => {
@@ -38,6 +40,7 @@ describe('CMS Dashboard & Web Frontend Full Synchronization', () => {
       // 2. Publish article via PATCH in dashboard
       const patchRes = await request(app)
         .patch(`/api/articles/${draft.id}`)
+        .set(adminHeaders)
         .send({ status: 'published', title: 'Breaking Tech News (Updated)' });
 
       expect(patchRes.status).toBe(200);

@@ -5,6 +5,8 @@ process.env.DASHBOARD_URL = 'http://localhost:3001';
 const request = require('supertest');
 const app = require('../src/app');
 const locationStore = require('../src/models/locationStore');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('Locations & Regional Models API', () => {
   beforeEach(async () => {
@@ -74,6 +76,7 @@ describe('Locations & Regional Models API', () => {
       // Create location
       const createRes = await request(app)
         .post('/api/locations')
+        .set(adminHeaders)
         .send({
           id: 'qa-doha',
           name: 'Doha',
@@ -89,13 +92,16 @@ describe('Locations & Regional Models API', () => {
       // Update location
       const updateRes = await request(app)
         .put('/api/locations/qa-doha')
+        .set(adminHeaders)
         .send({ name: 'Doha City' });
 
       expect(updateRes.status).toBe(200);
       expect(updateRes.body.name).toBe('Doha City');
 
       // Delete location
-      const deleteRes = await request(app).delete('/api/locations/qa-doha');
+      const deleteRes = await request(app)
+        .delete('/api/locations/qa-doha')
+        .set(adminHeaders);
       expect(deleteRes.status).toBe(200);
 
       const getRes = await request(app).get('/api/locations/qa-doha');

@@ -4,6 +4,8 @@ const path = require('path');
 const app = require('../src/app');
 const pipelineStore = require('../src/models/pipelineStore');
 const secretsManager = require('../src/services/secretsManager');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 jest.setTimeout(30000);
 
@@ -42,11 +44,13 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
     it('should fail with 400 if topic or category are missing or empty', async () => {
       const res1 = await request(app)
         .post('/api/pipeline/headlines')
+        .set(adminHeaders)
         .send({ topic: '' });
       expect(res1.statusCode).toBe(400);
 
       const res2 = await request(app)
         .post('/api/pipeline/headlines')
+        .set(adminHeaders)
         .send({ topic: 'Lebanon Tech', category: '' });
       expect(res2.statusCode).toBe(400);
     });
@@ -54,6 +58,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
     it('should generate 5 headline angles and create pipeline record with status headlines_generated', async () => {
       const res = await request(app)
         .post('/api/pipeline/headlines')
+        .set(adminHeaders)
         .send({
           topic: 'Artificial Intelligence in Beirut',
           category: 'Technology'
@@ -78,6 +83,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
     it('should fail with 400 if pipeline_id or chosen_headline are missing', async () => {
       const res = await request(app)
         .post('/api/pipeline/draft')
+        .set(adminHeaders)
         .send({ chosen_headline: 'Some Headline' });
       expect(res.statusCode).toBe(400);
     });
@@ -85,6 +91,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
     it('should fail with 404 if pipeline_id does not exist', async () => {
       const res = await request(app)
         .post('/api/pipeline/draft')
+        .set(adminHeaders)
         .send({
           pipeline_id: '00000000-0000-0000-0000-000000000000',
           chosen_headline: 'Some Headline'
@@ -96,6 +103,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
       // First generate headlines
       const headlineRes = await request(app)
         .post('/api/pipeline/headlines')
+        .set(adminHeaders)
         .send({
           topic: 'Lebanese Cuisine Global Expansion',
           category: 'Lifestyle'
@@ -106,6 +114,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
       // Draft generation
       const draftRes = await request(app)
         .post('/api/pipeline/draft')
+        .set(adminHeaders)
         .send({
           pipeline_id: pipelineId,
           chosen_headline: chosenHeadline
@@ -127,7 +136,8 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
   describe('4. POST /api/pipeline/media', () => {
     it('should fail with 400 if pipeline_id is missing', async () => {
       const res = await request(app)
-        .post('/api/pipeline/media');
+        .post('/api/pipeline/media')
+        .set(adminHeaders);
       expect(res.statusCode).toBe(400);
     });
 
@@ -135,6 +145,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
       // Create pipeline first
       const headlineRes = await request(app)
         .post('/api/pipeline/headlines')
+        .set(adminHeaders)
         .send({ topic: 'Beirut Summer Events', category: 'Culture' });
       const pipelineId = headlineRes.body.pipeline_id;
 
@@ -143,6 +154,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
 
       const mediaRes = await request(app)
         .post('/api/pipeline/media')
+        .set(adminHeaders)
         .field('pipeline_id', pipelineId)
         .attach('mainImage', samplePng, 'main.png')
         .attach('slideImages', samplePng, 'slide1.png')
@@ -161,6 +173,7 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
     it('should fail with 400 if pipeline_id is missing', async () => {
       const res = await request(app)
         .post('/api/pipeline/publish')
+        .set(adminHeaders)
         .send({});
       expect(res.statusCode).toBe(400);
     });
@@ -168,11 +181,13 @@ describe('Content Pipeline API Endpoints & DB Migration', () => {
     it('should publish pipeline, update rendered assets and status to published', async () => {
       const headlineRes = await request(app)
         .post('/api/pipeline/headlines')
+        .set(adminHeaders)
         .send({ topic: 'Fintech Innovations', category: 'Finance' });
       const pipelineId = headlineRes.body.pipeline_id;
 
       const pubRes = await request(app)
         .post('/api/pipeline/publish')
+        .set(adminHeaders)
         .send({ pipeline_id: pipelineId });
 
       expect(pubRes.statusCode).toBe(200);
