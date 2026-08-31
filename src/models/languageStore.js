@@ -1,9 +1,4 @@
-const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
-
-const DATA_DIR = path.join(__dirname, '../../data');
-const FILE_PATH = path.join(DATA_DIR, process.env.NODE_ENV === 'test' ? 'languages.test.json' : 'languages.json');
+const db = require('../db');
 
 const DEFAULT_SEED_LANGUAGES = [
   {
@@ -32,172 +27,226 @@ const DEFAULT_SEED_LANGUAGES = [
   }
 ];
 
-let writeQueue = Promise.resolve();
-let queue = Promise.resolve();
+let memoryLanguages = [];
 
-function enqueue(fn) {
-  const res = queue.then(() => fn());
-  queue = res.catch(() => {});
-  return res;
+function formatLanguageRecord(row) {
+  if (!row) return null;
+  return {
+    code: row.code,
+    name: row.name,
+    nativeName: row.native_name || row.nativeName || row.name,
+    dir: row.dir || 'ltr',
+    isDefault: row.is_default !== undefined ? Boolean(row.is_default) : Boolean(row.isDefault),
+    enabled: row.enabled !== undefined ? Boolean(row.enabled) : true
+  };
 }
 
-/**
- * Ensures data directory and persistence file exist.
- */
 async function ensureInitialized() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (err) {
-    // Directory already exists or creation failed
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT COUNT(*) FROM languages;');
+      if (res && res.rows && parseInt(res.rows[0].count, 10) === 0) {
+        for (const l of DEFAULT_SEED_LANGUAGES) {
+          await pool.query(
+            `INSERT INTO languages (code, name, native_name, dir, is_default, enabled)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (code) DO NOTHING;`,
+            [l.code, l.name, l.nativeName, l.dir, l.isDefault, l.enabled]
+          );
+        }
+      }
+      return;
+    } catch (err) {
+      // Fallback
+    }
   }
 
-  try {
-    await fs.access(FILE_PATH);
-  } catch (err) {
-    const initialData = process.env.NODE_ENV === 'test' ? DEFAULT_SEED_LANGUAGES : DEFAULT_SEED_LANGUAGES;
-    await fs.writeFile(FILE_PATH, JSON.stringify(initialData, null, 2), 'utf8');
+  if (memoryLanguages.length === 0) {
+    memoryLanguages = DEFAULT_SEED_LANGUAGES.map(l => ({ ...l }));
   }
 }
 
-/**
- * Reads all languages from store.
- */
 async function getAllLanguages() {
   await ensureInitialized();
-  try {
-    const data = await fs.readFile(FILE_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    return [];
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT * FROM languages ORDER BY code ASC;');
+      if (res && res.rows) {
+        return res.rows.map(formatLanguageRecord);
+      }
+    } catch (err) {
+      console.error('Database getAllLanguages error, using fallback:', err.message);
+    }
   }
+
+  return memoryLanguages.map(formatLanguageRecord);
 }
 
-/**
- * Saves language array atomically.
- */
-async function saveAll(languages) {
-  await ensureInitialized();
-  writeQueue = writeQueue.then(async () => {
-    const tempPath = `${FILE_PATH}.tmp.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
-    await fs.writeFile(tempPath, JSON.stringify(languages, null, 2), 'utf8');
-    await fs.rename(tempPath, FILE_PATH);
-  }).catch(err => {
-    console.error('Failed to save language store:', err);
-  });
-  return writeQueue;
-}
-
-/**
- * Gets active/enabled languages for frontend navigation & selectors.
- */
 async function getActiveLanguages() {
   const languages = await getAllLanguages();
   return languages.filter(l => l.enabled !== false);
 }
 
-/**
- * Gets a language by its ISO code.
- */
 async function getLanguageByCode(code) {
   if (!code) return null;
-  const languages = await getAllLanguages();
   const normalizedCode = String(code).trim().toLowerCase();
-  return languages.find(l => l.code && l.code.toLowerCase() === normalizedCode) || null;
-}
-
-/**
- * Creates/Registers a new language.
- */
-async function createLanguage(langData) {
-  return enqueue(async () => {
-    const languages = await getAllLanguages();
-    const code = String(langData.code || '').trim().toLowerCase();
-
-    if (!code) {
-      throw new Error('Language code is required.');
-    }
-
-    const existingIndex = languages.findIndex(l => l.code && l.code.toLowerCase() === code);
-    if (existingIndex !== -1) {
-      throw new Error(`Language with code '${code}' already exists.`);
-    }
-
-    // If new language is marked as default, unmark previous default
-    if (langData.isDefault) {
-      languages.forEach(l => { l.isDefault = false; });
-    }
-
-    const newLanguage = {
-      code,
-      name: langData.name || code.toUpperCase(),
-      nativeName: langData.nativeName || langData.name || code.toUpperCase(),
-      dir: langData.dir === 'rtl' ? 'rtl' : 'ltr',
-      isDefault: Boolean(langData.isDefault),
-      enabled: langData.enabled !== undefined ? Boolean(langData.enabled) : true
-    };
-
-    languages.push(newLanguage);
-    await saveAll(languages);
-    return newLanguage;
-  });
-}
-
-/**
- * Updates an existing language.
- */
-async function updateLanguage(code, updateData) {
-  return enqueue(async () => {
-    const languages = await getAllLanguages();
-    const normalizedCode = String(code).trim().toLowerCase();
-    const index = languages.findIndex(l => l.code && l.code.toLowerCase() === normalizedCode);
-
-    if (index === -1) {
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT * FROM languages WHERE LOWER(code) = $1 LIMIT 1;', [normalizedCode]);
+      if (res && res.rows && res.rows[0]) {
+        return formatLanguageRecord(res.rows[0]);
+      }
       return null;
+    } catch (err) {
+      console.error('Database getLanguageByCode error, using fallback:', err.message);
     }
+  }
 
-    if (updateData.isDefault) {
-      languages.forEach(l => { l.isDefault = false; });
+  const found = memoryLanguages.find(l => l.code && l.code.toLowerCase() === normalizedCode);
+  return found ? formatLanguageRecord(found) : null;
+}
+
+async function createLanguage(langData) {
+  const code = String(langData.code || '').trim().toLowerCase();
+  if (!code) {
+    throw new Error('Language code is required.');
+  }
+
+  const existing = await getLanguageByCode(code);
+  if (existing) {
+    throw new Error(`Language with code '${code}' already exists.`);
+  }
+
+  const isDefault = Boolean(langData.isDefault);
+  const newLang = {
+    code,
+    name: langData.name || code.toUpperCase(),
+    nativeName: langData.nativeName || langData.name || code.toUpperCase(),
+    dir: langData.dir === 'rtl' ? 'rtl' : 'ltr',
+    isDefault,
+    enabled: langData.enabled !== undefined ? Boolean(langData.enabled) : true
+  };
+
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      if (isDefault) {
+        await pool.query('UPDATE languages SET is_default = false;');
+      }
+      const sql = `
+        INSERT INTO languages (code, name, native_name, dir, is_default, enabled)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *;
+      `;
+      const res = await pool.query(sql, [
+        newLang.code,
+        newLang.name,
+        newLang.nativeName,
+        newLang.dir,
+        newLang.isDefault,
+        newLang.enabled
+      ]);
+      if (res && res.rows && res.rows[0]) {
+        return formatLanguageRecord(res.rows[0]);
+      }
+    } catch (err) {
+      console.error('Database createLanguage error, using fallback:', err.message);
     }
+  }
 
-    const existing = languages[index];
-    const updated = {
-      ...existing,
-      name: typeof updateData.name === 'string' ? updateData.name : existing.name,
-      nativeName: typeof updateData.nativeName === 'string' ? updateData.nativeName : existing.nativeName,
-      dir: updateData.dir ? (updateData.dir === 'rtl' ? 'rtl' : 'ltr') : existing.dir,
-      isDefault: updateData.isDefault !== undefined ? Boolean(updateData.isDefault) : existing.isDefault,
-      enabled: updateData.enabled !== undefined ? Boolean(updateData.enabled) : existing.enabled
+  if (isDefault) {
+    memoryLanguages.forEach(l => { l.isDefault = false; });
+  }
+  memoryLanguages.push(newLang);
+  return formatLanguageRecord(newLang);
+}
+
+async function updateLanguage(code, updateData) {
+  const normalizedCode = String(code).trim().toLowerCase();
+  const existing = await getLanguageByCode(normalizedCode);
+  if (!existing) {
+    return null;
+  }
+
+  const isDefault = updateData.isDefault !== undefined ? Boolean(updateData.isDefault) : existing.isDefault;
+  const updatedName = typeof updateData.name === 'string' ? updateData.name : existing.name;
+  const updatedNativeName = typeof updateData.nativeName === 'string' ? updateData.nativeName : existing.nativeName;
+  const updatedDir = updateData.dir ? (updateData.dir === 'rtl' ? 'rtl' : 'ltr') : existing.dir;
+  const updatedEnabled = updateData.enabled !== undefined ? Boolean(updateData.enabled) : existing.enabled;
+
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      if (isDefault) {
+        await pool.query('UPDATE languages SET is_default = false;');
+      }
+      const sql = `
+        UPDATE languages
+        SET name = $1, native_name = $2, dir = $3, is_default = $4, enabled = $5, updated_at = CURRENT_TIMESTAMP
+        WHERE LOWER(code) = $6
+        RETURNING *;
+      `;
+      const res = await pool.query(sql, [
+        updatedName,
+        updatedNativeName,
+        updatedDir,
+        isDefault,
+        updatedEnabled,
+        normalizedCode
+      ]);
+      if (res && res.rows && res.rows[0]) {
+        return formatLanguageRecord(res.rows[0]);
+      }
+    } catch (err) {
+      console.error('Database updateLanguage error, using fallback:', err.message);
+    }
+  }
+
+  if (isDefault) {
+    memoryLanguages.forEach(l => { l.isDefault = false; });
+  }
+
+  const index = memoryLanguages.findIndex(l => l.code && l.code.toLowerCase() === normalizedCode);
+  if (index !== -1) {
+    memoryLanguages[index] = {
+      ...memoryLanguages[index],
+      name: updatedName,
+      nativeName: updatedNativeName,
+      dir: updatedDir,
+      isDefault,
+      enabled: updatedEnabled
     };
-
-    languages[index] = updated;
-    await saveAll(languages);
-    return updated;
-  });
+    return formatLanguageRecord(memoryLanguages[index]);
+  }
+  return null;
 }
 
-/**
- * Deletes a language by code.
- */
 async function deleteLanguage(code) {
-  return enqueue(async () => {
-    const languages = await getAllLanguages();
-    const normalizedCode = String(code).trim().toLowerCase();
-    const index = languages.findIndex(l => l.code && l.code.toLowerCase() === normalizedCode);
-
-    if (index === -1) {
+  const normalizedCode = String(code).trim().toLowerCase();
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('DELETE FROM languages WHERE LOWER(code) = $1 RETURNING code;', [normalizedCode]);
+      if (res && res.rows && res.rows.length > 0) {
+        return true;
+      }
       return false;
+    } catch (err) {
+      console.error('Database deleteLanguage error, using fallback:', err.message);
     }
+  }
 
-    languages.splice(index, 1);
-    await saveAll(languages);
-    return true;
-  });
+  const index = memoryLanguages.findIndex(l => l.code && l.code.toLowerCase() === normalizedCode);
+  if (index === -1) {
+    return false;
+  }
+  memoryLanguages.splice(index, 1);
+  return true;
 }
 
-/**
- * Resolves requested locale with intelligent fallbacks.
- * Matches exact code -> primary subtag (e.g. en-US -> en) -> default language -> first enabled language.
- */
 async function resolveLocale(requestedLocale) {
   const activeLanguages = await getActiveLanguages();
   if (!activeLanguages.length) {
@@ -215,7 +264,7 @@ async function resolveLocale(requestedLocale) {
   const exact = activeLanguages.find(l => l.code && l.code.toLowerCase() === cleanReq);
   if (exact) return exact;
 
-  // 2. Primary subtag match (e.g. 'en-US' -> 'en', 'ar-LB' -> 'ar')
+  // 2. Primary subtag match
   const primarySubtag = cleanReq.split('-')[0].split('_')[0];
   const subtagMatch = activeLanguages.find(l => l.code && l.code.toLowerCase() === primarySubtag);
   if (subtagMatch) return subtagMatch;
@@ -225,17 +274,27 @@ async function resolveLocale(requestedLocale) {
   return defaultLang;
 }
 
-/**
- * Resets store to default seed languages (or empty for tests if cleared).
- */
 async function clearStore(useSeed = false) {
-  return enqueue(async () => {
-    if (useSeed) {
-      await saveAll(DEFAULT_SEED_LANGUAGES);
-    } else {
-      await saveAll([]);
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      await pool.query('TRUNCATE TABLE languages;');
+      if (useSeed) {
+        for (const l of DEFAULT_SEED_LANGUAGES) {
+          await pool.query(
+            `INSERT INTO languages (code, name, native_name, dir, is_default, enabled)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (code) DO NOTHING;`,
+            [l.code, l.name, l.nativeName, l.dir, l.isDefault, l.enabled]
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Database clearStore error, using fallback:', err.message);
     }
-  });
+  }
+
+  memoryLanguages = useSeed ? DEFAULT_SEED_LANGUAGES.map(l => ({ ...l })) : [];
 }
 
 module.exports = {
