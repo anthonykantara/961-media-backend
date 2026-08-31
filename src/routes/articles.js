@@ -6,6 +6,7 @@ const { cmsDispatch } = require('../workers/cmsDispatch');
 const locationStore = require('../models/locationStore');
 const queueStore = require('../models/queueStore');
 const { triggerImmediateProcessing } = require('../workers/queueProcessor');
+const { authenticateJwt, requireRole, checkArticlePublishingRole, auditLogger } = require('../middleware/auth');
 
 // Helper function to validate validation parameters
 function validateArticleData(data, isUpdate = false) {
@@ -307,7 +308,7 @@ router.get('/:id', async (req, res, next) => {
  * POST /api/articles
  * Creates a new article
  */
-router.post('/', async (req, res, next) => {
+router.post('/', authenticateJwt, auditLogger, requireRole('Contributor'), checkArticlePublishingRole, async (req, res, next) => {
   try {
     const errors = validateArticleData(req.body, false);
     if (errors.length > 0) {
@@ -325,7 +326,7 @@ router.post('/', async (req, res, next) => {
  * PUT /api/articles/:id
  * Updates an existing article
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', authenticateJwt, auditLogger, requireRole('Contributor'), checkArticlePublishingRole, async (req, res, next) => {
   try {
     const { id } = req.params;
     
@@ -352,7 +353,7 @@ router.put('/:id', async (req, res, next) => {
  * PATCH /api/articles/:id
  * Partial update for an article (e.g., dashboard publishing status changes)
  */
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', authenticateJwt, auditLogger, requireRole('Contributor'), checkArticlePublishingRole, async (req, res, next) => {
   try {
     const { id } = req.params;
     
@@ -377,7 +378,7 @@ router.patch('/:id', async (req, res, next) => {
  * DELETE /api/articles/:id
  * Deletes an article
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const deleted = await articleStore.deleteArticle(id);
@@ -394,7 +395,7 @@ router.delete('/:id', async (req, res, next) => {
  * POST /api/articles/:id/dispatch
  * Triggers background social distribution and CMS publishing dispatch workers asynchronously via durable database queue.
  */
-router.post('/:id/dispatch', async (req, res, next) => {
+router.post('/:id/dispatch', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const existing = await articleStore.getArticleById(id);
@@ -438,7 +439,7 @@ router.post('/:id/dispatch', async (req, res, next) => {
  * POST /api/articles/:id/publish
  * Publishes an article and triggers full background dispatch pipeline asynchronously via durable database queue.
  */
-router.post('/:id/publish', async (req, res, next) => {
+router.post('/:id/publish', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const existing = await articleStore.getArticleById(id);

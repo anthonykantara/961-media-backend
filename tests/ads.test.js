@@ -2,6 +2,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const adsStore = require('../src/models/adsStore');
 const { startWasabiAdCleanupScheduler, stopWasabiAdCleanupScheduler } = require('../src/workers/wasabiAdCleanup');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
 
@@ -197,7 +199,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       totalAmount: 5000
     });
 
-    const allRes = await request(app).get('/api/v1/admin/leads-and-campaigns');
+    const allRes = await request(app).get('/api/v1/admin/leads-and-campaigns').set(adminHeaders);
     expect(allRes.statusCode).toEqual(200);
     expect(allRes.body.totalCount).toEqual(2);
 
@@ -205,12 +207,12 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
     expect(allRes.body.opportunities[0].totalAmount).toEqual(5000);
 
     // Filter by country=sa
-    const saFilter = await request(app).get('/api/v1/admin/leads-and-campaigns?country=sa');
+    const saFilter = await request(app).get('/api/v1/admin/leads-and-campaigns?country=sa').set(adminHeaders);
     expect(saFilter.body.totalCount).toEqual(1);
     expect(saFilter.body.opportunities[0].advertiser.brandName).toEqual('Brand Two');
 
     // Filter by search=Brand One
-    const searchFilter = await request(app).get('/api/v1/admin/leads-and-campaigns?search=Brand%20One');
+    const searchFilter = await request(app).get('/api/v1/admin/leads-and-campaigns?search=Brand%20One').set(adminHeaders);
     expect(searchFilter.body.totalCount).toEqual(1);
     expect(searchFilter.body.opportunities[0].advertiser.brandName).toEqual('Brand One');
   });
@@ -230,7 +232,8 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
     const token = leadRes.body.accessToken;
 
     const slackRes = await request(app)
-      .post(`/api/v1/admin/campaigns/${campaignId}/slack-channel`);
+      .post(`/api/v1/admin/campaigns/${campaignId}/slack-channel`)
+      .set(adminHeaders);
 
     expect(slackRes.statusCode).toEqual(200);
     expect(slackRes.body.slackChannel).toEqual('#ads-starburst-tech');
@@ -242,6 +245,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
   it('POST /api/v1/admin/cleanup-temp-assets triggers temporary asset cleanup', async () => {
     const res = await request(app)
       .post('/api/v1/admin/cleanup-temp-assets')
+      .set(adminHeaders)
       .send({ maxAgeHours: 12 });
 
     expect(res.statusCode).toEqual(200);

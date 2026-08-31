@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const router = express.Router();
+const { authenticateJwt, requireRole, auditLogger } = require('../middleware/auth');
 
 const pipelineStore = require('../models/pipelineStore');
 const geminiService = require('../services/geminiService');
@@ -59,7 +60,7 @@ router.get('/:id', async (req, res, next) => {
  * Input: { topic: "...", category: "..." }
  * Queries Gemini API (via AWS Secrets Manager) to generate 5 headline angles.
  */
-router.post('/headlines', async (req, res, next) => {
+router.post('/headlines', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const { topic, category } = req.body || {};
 
@@ -99,7 +100,7 @@ router.post('/headlines', async (req, res, next) => {
  * Input: { pipeline_id: "...", chosen_headline: "..." }
  * Queries Gemini API with Structured Outputs schema to populate draft content.
  */
-router.post('/draft', async (req, res, next) => {
+router.post('/draft', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const { pipeline_id, id, chosen_headline } = req.body || {};
     const targetId = pipeline_id || id;
@@ -142,7 +143,7 @@ router.post('/draft', async (req, res, next) => {
  * Input: Multipart form data with pipeline_id, mainImage, and slideImages.
  * Losslessly optimizes uploaded images and saves to Wasabi Cloud Storage.
  */
-router.post('/media', (req, res, next) => {
+router.post('/media', authenticateJwt, auditLogger, requireRole('Admin'), (req, res, next) => {
   mediaUpload(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: 'Bad Request', message: err.message });
@@ -210,7 +211,7 @@ router.post('/media', (req, res, next) => {
  * Input: { pipeline_id: "..." }
  * Dispatches pipeline to trigger rendering and social distribution workflows using Secrets Manager keys.
  */
-router.post('/publish', async (req, res, next) => {
+router.post('/publish', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const { pipeline_id, id } = req.body || {};
     const targetId = pipeline_id || id;

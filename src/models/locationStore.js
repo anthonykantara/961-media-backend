@@ -1,9 +1,4 @@
-const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
-
-const DATA_DIR = path.join(__dirname, '../../data');
-const FILE_PATH = path.join(DATA_DIR, process.env.NODE_ENV === 'test' ? 'locations.test.json' : 'locations.json');
+const db = require('../db');
 
 const DEFAULT_SEED_LOCATIONS = [
   {
@@ -48,144 +43,224 @@ const DEFAULT_SEED_LOCATIONS = [
   }
 ];
 
-let writeQueue = Promise.resolve();
-let queue = Promise.resolve();
+let memoryLocations = [];
 
-function enqueue(fn) {
-  const res = queue.then(() => fn());
-  queue = res.catch(() => {});
-  return res;
+function formatLocationRecord(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    country: row.country || '',
+    countryCode: row.country_code || row.countryCode || '',
+    regionId: row.region_id || row.regionId || 'other',
+    regionName: row.region_name || row.regionName || 'Other',
+    timezone: row.timezone || 'UTC',
+    enabled: row.enabled !== undefined ? Boolean(row.enabled) : true
+  };
 }
 
 async function ensureInitialized() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (err) {
-    // Directory already exists or creation failed
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT COUNT(*) FROM locations;');
+      if (res && res.rows && parseInt(res.rows[0].count, 10) === 0) {
+        for (const loc of DEFAULT_SEED_LOCATIONS) {
+          await pool.query(
+            `INSERT INTO locations (id, name, country, country_code, region_id, region_name, timezone, enabled)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (id) DO NOTHING;`,
+            [loc.id, loc.name, loc.country, loc.countryCode, loc.regionId, loc.regionName, loc.timezone, loc.enabled]
+          );
+        }
+      }
+      return;
+    } catch (err) {
+      // Fallback
+    }
   }
 
-  try {
-    await fs.access(FILE_PATH);
-  } catch (err) {
-    await fs.writeFile(FILE_PATH, JSON.stringify(DEFAULT_SEED_LOCATIONS, null, 2), 'utf8');
+  if (memoryLocations.length === 0) {
+    memoryLocations = DEFAULT_SEED_LOCATIONS.map(l => ({ ...l }));
   }
 }
 
 async function getAllLocations() {
   await ensureInitialized();
-  try {
-    const data = await fs.readFile(FILE_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    return [];
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT * FROM locations ORDER BY id ASC;');
+      if (res && res.rows) {
+        return res.rows.map(formatLocationRecord);
+      }
+    } catch (err) {
+      console.error('Database getAllLocations error, using fallback:', err.message);
+    }
   }
-}
 
-async function saveAll(locations) {
-  await ensureInitialized();
-  writeQueue = writeQueue.then(async () => {
-    const tempPath = `${FILE_PATH}.tmp.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
-    await fs.writeFile(tempPath, JSON.stringify(locations, null, 2), 'utf8');
-    await fs.rename(tempPath, FILE_PATH);
-  }).catch(err => {
-    console.error('Failed to save location store:', err);
-  });
-  return writeQueue;
+  return memoryLocations.map(formatLocationRecord);
 }
 
 async function getLocationById(id) {
   if (!id) return null;
-  const locations = await getAllLocations();
-  return locations.find(l => l.id && l.id.toLowerCase() === String(id).toLowerCase()) || null;
+  const normalizedId = String(id).trim().toLowerCase();
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT * FROM locations WHERE LOWER(id) = $1 LIMIT 1;', [normalizedId]);
+      if (res && res.rows && res.rows[0]) {
+        return formatLocationRecord(res.rows[0]);
+      }
+      return null;
+    } catch (err) {
+      console.error('Database getLocationById error, using fallback:', err.message);
+    }
+  }
+
+  const found = memoryLocations.find(l => l.id && l.id.toLowerCase() === normalizedId);
+  return found ? formatLocationRecord(found) : null;
 }
 
 async function createLocation(locationData) {
-  return enqueue(async () => {
-    const locations = await getAllLocations();
-    const id = String(locationData.id || '').trim().toLowerCase();
+  const id = String(locationData.id || '').trim().toLowerCase();
+  if (!id) {
+    throw new Error('Location ID is required.');
+  }
 
-    if (!id) {
-      throw new Error('Location ID is required.');
+  const existing = await getLocationById(id);
+  if (existing) {
+    throw new Error(`Location with ID '${id}' already exists.`);
+  }
+
+  const newLocation = {
+    id,
+    name: locationData.name || id,
+    country: locationData.country || '',
+    countryCode: locationData.countryCode || locationData.country_code || '',
+    regionId: (locationData.regionId || locationData.region_id || 'other').toLowerCase(),
+    regionName: locationData.regionName || locationData.region_name || 'Other',
+    timezone: locationData.timezone || 'UTC',
+    enabled: locationData.enabled !== undefined ? Boolean(locationData.enabled) : true
+  };
+
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const sql = `
+        INSERT INTO locations (id, name, country, country_code, region_id, region_name, timezone, enabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *;
+      `;
+      const res = await pool.query(sql, [
+        newLocation.id,
+        newLocation.name,
+        newLocation.country,
+        newLocation.countryCode,
+        newLocation.regionId,
+        newLocation.regionName,
+        newLocation.timezone,
+        newLocation.enabled
+      ]);
+      if (res && res.rows && res.rows[0]) {
+        return formatLocationRecord(res.rows[0]);
+      }
+    } catch (err) {
+      console.error('Database createLocation error, using fallback:', err.message);
     }
+  }
 
-    const existingIndex = locations.findIndex(l => l.id && l.id.toLowerCase() === id);
-    if (existingIndex !== -1) {
-      throw new Error(`Location with ID '${id}' already exists.`);
-    }
-
-    const newLocation = {
-      id,
-      name: locationData.name || id,
-      country: locationData.country || '',
-      countryCode: locationData.countryCode || '',
-      regionId: (locationData.regionId || 'other').toLowerCase(),
-      regionName: locationData.regionName || 'Other',
-      timezone: locationData.timezone || 'UTC',
-      enabled: locationData.enabled !== undefined ? Boolean(locationData.enabled) : true
-    };
-
-    locations.push(newLocation);
-    await saveAll(locations);
-    return newLocation;
-  });
+  memoryLocations.push(newLocation);
+  return formatLocationRecord(newLocation);
 }
 
 async function updateLocation(id, updateData) {
-  return enqueue(async () => {
-    const locations = await getAllLocations();
-    const normalizedId = String(id).trim().toLowerCase();
-    const index = locations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
+  const normalizedId = String(id).trim().toLowerCase();
+  const existing = await getLocationById(normalizedId);
 
-    if (index === -1) {
-      return null;
+  if (!existing) {
+    return null;
+  }
+
+  const updatedName = typeof updateData.name === 'string' ? updateData.name : existing.name;
+  const updatedCountry = typeof updateData.country === 'string' ? updateData.country : existing.country;
+  const updatedCountryCode = typeof updateData.countryCode === 'string' ? updateData.countryCode : existing.countryCode;
+  const updatedRegionId = typeof updateData.regionId === 'string' ? updateData.regionId.toLowerCase() : existing.regionId;
+  const updatedRegionName = typeof updateData.regionName === 'string' ? updateData.regionName : existing.regionName;
+  const updatedTimezone = typeof updateData.timezone === 'string' ? updateData.timezone : existing.timezone;
+  const updatedEnabled = updateData.enabled !== undefined ? Boolean(updateData.enabled) : existing.enabled;
+
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const sql = `
+        UPDATE locations
+        SET name = $1, country = $2, country_code = $3, region_id = $4,
+            region_name = $5, timezone = $6, enabled = $7, updated_at = CURRENT_TIMESTAMP
+        WHERE LOWER(id) = $8
+        RETURNING *;
+      `;
+      const res = await pool.query(sql, [
+        updatedName,
+        updatedCountry,
+        updatedCountryCode,
+        updatedRegionId,
+        updatedRegionName,
+        updatedTimezone,
+        updatedEnabled,
+        normalizedId
+      ]);
+      if (res && res.rows && res.rows[0]) {
+        return formatLocationRecord(res.rows[0]);
+      }
+    } catch (err) {
+      console.error('Database updateLocation error, using fallback:', err.message);
     }
+  }
 
-    const existing = locations[index];
-    const updated = {
-      ...existing,
-      name: typeof updateData.name === 'string' ? updateData.name : existing.name,
-      country: typeof updateData.country === 'string' ? updateData.country : existing.country,
-      countryCode: typeof updateData.countryCode === 'string' ? updateData.countryCode : existing.countryCode,
-      regionId: typeof updateData.regionId === 'string' ? updateData.regionId.toLowerCase() : existing.regionId,
-      regionName: typeof updateData.regionName === 'string' ? updateData.regionName : existing.regionName,
-      timezone: typeof updateData.timezone === 'string' ? updateData.timezone : existing.timezone,
-      enabled: updateData.enabled !== undefined ? Boolean(updateData.enabled) : existing.enabled
+  const index = memoryLocations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
+  if (index !== -1) {
+    memoryLocations[index] = {
+      ...memoryLocations[index],
+      name: updatedName,
+      country: updatedCountry,
+      countryCode: updatedCountryCode,
+      regionId: updatedRegionId,
+      regionName: updatedRegionName,
+      timezone: updatedTimezone,
+      enabled: updatedEnabled
     };
-
-    locations[index] = updated;
-    await saveAll(locations);
-    return updated;
-  });
+    return formatLocationRecord(memoryLocations[index]);
+  }
+  return null;
 }
 
 async function deleteLocation(id) {
-  return enqueue(async () => {
-    const locations = await getAllLocations();
-    const normalizedId = String(id).trim().toLowerCase();
-    const index = locations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
-
-    if (index === -1) {
+  const normalizedId = String(id).trim().toLowerCase();
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('DELETE FROM locations WHERE LOWER(id) = $1 RETURNING id;', [normalizedId]);
+      if (res && res.rows && res.rows.length > 0) {
+        return true;
+      }
       return false;
+    } catch (err) {
+      console.error('Database deleteLocation error, using fallback:', err.message);
     }
+  }
 
-    locations.splice(index, 1);
-    await saveAll(locations);
-    return true;
-  });
+  const index = memoryLocations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
+  if (index === -1) {
+    return false;
+  }
+  memoryLocations.splice(index, 1);
+  return true;
 }
 
-/**
- * Regional Models and Grouping Logic
- */
-
-/**
- * Returns locations grouped by region.
- * @returns {Promise<Array<{ id: string, name: string, locations: Array<Object> }>>}
- */
 async function getRegionalGroups() {
   const locations = await getAllLocations();
   const activeLocations = locations.filter(l => l.enabled !== false);
-
   const regionMap = new Map();
 
   activeLocations.forEach(loc => {
@@ -203,10 +278,6 @@ async function getRegionalGroups() {
   return Array.from(regionMap.values());
 }
 
-/**
- * Returns all active locations in a given region.
- * @param {string} regionId
- */
 async function getLocationsByRegion(regionId) {
   if (!regionId) return [];
   const locations = await getAllLocations();
@@ -214,11 +285,6 @@ async function getLocationsByRegion(regionId) {
   return locations.filter(l => (l.regionId || '').toLowerCase() === normalizedRegion && l.enabled !== false);
 }
 
-/**
- * Filters an array of articles/posts by regional group.
- * @param {Array} articles List of articles
- * @param {string} regionId Target region ID
- */
 async function getArticlesByRegion(articles, regionId) {
   if (!regionId || !Array.isArray(articles)) return articles;
   const regionLocations = await getLocationsByRegion(regionId);
@@ -228,13 +294,26 @@ async function getArticlesByRegion(articles, regionId) {
 }
 
 async function clearStore(useSeed = false) {
-  return enqueue(async () => {
-    if (useSeed) {
-      await saveAll(DEFAULT_SEED_LOCATIONS);
-    } else {
-      await saveAll([]);
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      await pool.query('TRUNCATE TABLE locations;');
+      if (useSeed) {
+        for (const loc of DEFAULT_SEED_LOCATIONS) {
+          await pool.query(
+            `INSERT INTO locations (id, name, country, country_code, region_id, region_name, timezone, enabled)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (id) DO NOTHING;`,
+            [loc.id, loc.name, loc.country, loc.countryCode, loc.regionId, loc.regionName, loc.timezone, loc.enabled]
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Database clearStore error, using fallback:', err.message);
     }
-  });
+  }
+
+  memoryLocations = useSeed ? DEFAULT_SEED_LOCATIONS.map(l => ({ ...l })) : [];
 }
 
 module.exports = {

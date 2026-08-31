@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const imageEngine = require('../services/imageEngine');
+const { authenticateJwt, requireRole, auditLogger } = require('../middleware/auth');
 
 /**
  * POST /api/express-creation
@@ -10,7 +11,7 @@ const imageEngine = require('../services/imageEngine');
  * 3. Instagram carousel deck (1080x1350 PNGs x 4 with 40% dark overlay & nav arrows)
  * 4. Wasabi upload & Cloudflare CDN URL generation
  */
-router.post('/', async (req, res, next) => {
+router.post('/', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const { headline, title, carousel_slides, image, imageUrl, image_path, job_id, article_id } = req.body || {};
 
@@ -32,7 +33,7 @@ router.post('/', async (req, res, next) => {
  * POST /api/express-creation/render
  * Alias endpoint for rendering media assets
  */
-router.post('/render', async (req, res, next) => {
+router.post('/render', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const result = await imageEngine.processExpressCreation(req.body || {});
     return res.status(200).json(result);

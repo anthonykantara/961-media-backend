@@ -6,6 +6,8 @@ const request = require('supertest');
 const app = require('../src/app');
 const articleStore = require('../src/models/articleStore');
 const { dispatchAll } = require('../src/workers/dispatchWorker');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('Dispatch Orchestrator & API Integration', () => {
   beforeEach(async () => {
@@ -85,6 +87,7 @@ describe('Dispatch Orchestrator & API Integration', () => {
 
     const res = await request(app)
       .post(`/api/articles/${article.id}/dispatch`)
+      .set(adminHeaders)
       .send({
         secrets: mockSecrets,
         facebookOptions: { fetch: mockFetch },
@@ -118,6 +121,7 @@ describe('Dispatch Orchestrator & API Integration', () => {
 
     const res = await request(app)
       .post(`/api/articles/${article.id}/publish`)
+      .set(adminHeaders)
       .send({
         secrets: mockSecrets,
         facebookOptions: { fetch: mockFetch },
