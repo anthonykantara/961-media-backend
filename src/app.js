@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+
 const articlesRouter = require('./routes/articles');
 const pipelineRouter = require('./routes/pipeline');
 const languagesRouter = require('./routes/languages');
@@ -13,6 +16,28 @@ const adsRouter = require('./routes/ads');
 dotenv.config();
 
 const app = express();
+
+// Configure trust proxy for reverse proxy deployments (e.g. Nginx, Cloudflare)
+if (process.env.TRUST_PROXY) {
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy === 'true') {
+    app.set('trust proxy', true);
+  } else if (trustProxy === 'false') {
+    app.set('trust proxy', false);
+  } else if (!isNaN(Number(trustProxy))) {
+    app.set('trust proxy', Number(trustProxy));
+  } else {
+    app.set('trust proxy', trustProxy);
+  }
+} else {
+  app.set('trust proxy', 1);
+}
+
+// Attach Helmet HTTP security headers across all routes.
+// Configure crossOriginResourcePolicy to 'cross-origin' so public clients can fetch and display media assets.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 
 // Safe JSON body parsing
 app.use(express.json());
@@ -52,6 +77,53 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+
+// Rate limit skip condition (allows disabling rate limiting in tests unless explicitly enabled)
+const shouldSkipRateLimit = (req) => {
+  if (process.env.DISABLE_RATE_LIMITING === 'true') {
+    return true;
+  }
+  if (process.env.NODE_ENV === 'test' && process.env.ENABLE_TEST_RATE_LIMIT !== 'true') {
+    return true;
+  }
+  return false;
+};
+
+// High-cost AI pipeline rate limiter
+const pipelineRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: (req, res) => parseInt(process.env.RATE_LIMIT_PIPELINE_MAX, 10) || 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: shouldSkipRateLimit,
+  handler: (req, res, next, options) => {
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Too many requests for high-cost AI pipeline endpoints, please try again later.'
+    });
+  }
+});
+
+// General public API rate limiter
+const publicRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: (req, res) => parseInt(process.env.RATE_LIMIT_PUBLIC_MAX, 10) || 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: shouldSkipRateLimit,
+  handler: (req, res, next, options) => {
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'Too many requests, please try again later.'
+    });
+  }
+});
+
+// Apply rate limiting middleware
+app.use('/api/pipeline', pipelineRateLimiter);
+app.use('/api/express-creation', pipelineRateLimiter);
+app.use('/api/articles/express-creation', pipelineRateLimiter);
+app.use('/api', publicRateLimiter);
 
 // Register routes
 app.use('/api/articles/express-creation', expressCreationRouter);
