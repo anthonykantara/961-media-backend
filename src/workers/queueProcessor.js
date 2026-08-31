@@ -1,8 +1,45 @@
 const queueStore = require('../models/queueStore');
+const articleStore = require('../models/articleStore');
 const { dispatchAll } = require('./dispatchWorker');
 
 let workerTimer = null;
 const activeTaskIds = new Set();
+
+/**
+ * Scans for scheduled articles whose release time has passed (status = 'scheduled' and publish_at <= NOW()),
+ * updates their status to 'published', and enqueues distribution tasks.
+ * 
+ * @returns {Promise<Array<object>>} Enqueued tasks for scheduled articles
+ */
+async function checkScheduledArticles() {
+  try {
+    const dueArticles = await articleStore.getScheduledArticlesDueToPublish();
+    if (!dueArticles || dueArticles.length === 0) return [];
+
+    const enqueuedTasks = [];
+    for (const article of dueArticles) {
+      await articleStore.updateArticle(article.id, { status: 'published' });
+
+      const existingTasks = await queueStore.getTasksByArticleId(article.id);
+      const hasActiveTask = existingTasks.some(t =>
+        t.status === 'pending' || t.status === 'processing' || t.status === 'retry_scheduled'
+      );
+
+      if (!hasActiveTask) {
+        const taskOptions = article.options || article.dispatchOptions || {};
+        const task = await queueStore.enqueueTask({
+          articleId: article.id,
+          options: taskOptions
+        });
+        enqueuedTasks.push(task);
+      }
+    }
+    return enqueuedTasks;
+  } catch (err) {
+    console.error('Error scanning scheduled articles:', err.message);
+    return [];
+  }
+}
 
 /**
  * Claims and processes all currently ready tasks in background queue.
@@ -11,6 +48,18 @@ const activeTaskIds = new Set();
  * @returns {Promise<Array<object>>} List of processed task results.
  */
 async function processNextTasks() {
+  try {
+    await queueStore.recoverStaleLocks();
+  } catch (err) {
+    console.error('Error recovering stale locks:', err.message);
+  }
+
+  try {
+    await checkScheduledArticles();
+  } catch (err) {
+    console.error('Error checking scheduled articles:', err.message);
+  }
+
   const tasks = await queueStore.claimPendingTasks(10);
   if (tasks.length === 0) return [];
 
@@ -124,5 +173,6 @@ module.exports = {
   processNextTasks,
   triggerImmediateProcessing,
   startQueueWorker,
-  stopQueueWorker
+  stopQueueWorker,
+  checkScheduledArticles
 };

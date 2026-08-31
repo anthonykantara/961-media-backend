@@ -118,6 +118,15 @@ function formatArticleRecord(row) {
   const previousPermalinks = parseArrayField(row.previous_permalinks || row.previousPermalinks || row.redirects);
   const imgVal = row.image || row.image_url || row.imageUrl || '';
   const permalinkVal = row.permalink || row.slug || '';
+  const publishAtVal = row.publish_at || row.publishAt || row.scheduledAt || null;
+  let optionsVal = row.options || row.dispatchOptions || {};
+  if (typeof optionsVal === 'string') {
+    try {
+      optionsVal = JSON.parse(optionsVal);
+    } catch (e) {
+      optionsVal = {};
+    }
+  }
 
   return {
     id: row.id,
@@ -133,6 +142,9 @@ function formatArticleRecord(row) {
     image: imgVal,
     imageUrl: imgVal,
     status: row.status || 'draft',
+    publish_at: publishAtVal,
+    publishAt: publishAtVal,
+    options: optionsVal,
     locationId: row.location_id || row.locationId || 'lb',
     language: row.language || 'en',
     date: row.date || '',
@@ -377,6 +389,8 @@ async function createArticle(articleData) {
 
   const id = articleData.id || crypto.randomUUID();
 
+  const publishAtVal = articleData.publish_at || articleData.publishAt || articleData.scheduledAt || null;
+
   const newArticle = {
     id,
     title: articleData.title,
@@ -391,6 +405,9 @@ async function createArticle(articleData) {
     image: imageVal,
     imageUrl: imageVal,
     status: articleData.status || 'draft',
+    publish_at: publishAtVal,
+    publishAt: publishAtVal,
+    options: articleData.options || articleData.dispatchOptions || {},
     locationId: articleData.locationId || 'lb',
     language: articleData.language || 'en',
     date: articleData.date || dateStr,
@@ -506,6 +523,10 @@ async function updateArticle(id, updateData) {
     ? updateData.imageUrl
     : (typeof updateData.image === 'string' ? updateData.image : (existing.imageUrl || existing.image || ''));
 
+  const publishAtUpdated = updateData.publish_at !== undefined ? updateData.publish_at :
+    (updateData.publishAt !== undefined ? updateData.publishAt :
+    (updateData.scheduledAt !== undefined ? updateData.scheduledAt : (existing.publish_at || existing.publishAt || existing.scheduledAt || null)));
+
   const updatedArticle = {
     ...existing,
     title: typeof updateData.title === 'string' ? updateData.title : existing.title,
@@ -520,6 +541,9 @@ async function updateArticle(id, updateData) {
     image: imageVal,
     imageUrl: imageVal,
     status: typeof updateData.status === 'string' ? updateData.status : existing.status,
+    publish_at: publishAtUpdated,
+    publishAt: publishAtUpdated,
+    options: updateData.options || updateData.dispatchOptions || existing.options || existing.dispatchOptions || {},
     locationId: typeof updateData.locationId === 'string' ? updateData.locationId : (existing.locationId || 'lb'),
     language: typeof updateData.language === 'string' ? updateData.language : (existing.language || 'en'),
     date: typeof updateData.date === 'string' ? updateData.date : existing.date,
@@ -671,6 +695,29 @@ async function clearStore() {
   memoryArticles = [];
 }
 
+/**
+ * Fetches all scheduled articles whose release time (publish_at / publishAt / scheduledAt) is due (<= now).
+ * @returns {Promise<Array<Object>>} List of due scheduled articles.
+ */
+async function getScheduledArticlesDueToPublish() {
+  const articles = await getAllArticles();
+  const nowTs = Date.now();
+  return articles.filter(a => {
+    if (!a || !a.status) return false;
+    if (a.status.toLowerCase() !== 'scheduled') return false;
+    const releaseTime = a.publish_at || a.publishAt || a.scheduledAt;
+    if (!releaseTime) return false;
+    let releaseTs = typeof releaseTime === 'number' ? releaseTime : new Date(releaseTime).getTime();
+    if (typeof releaseTime === 'number' && releaseTime < 1e11) {
+      releaseTs = releaseTime * 1000;
+    } else if (typeof releaseTime === 'string' && /^\d+$/.test(releaseTime)) {
+      const num = Number(releaseTime);
+      releaseTs = num < 1e11 ? num * 1000 : num;
+    }
+    return !isNaN(releaseTs) && releaseTs <= nowTs;
+  });
+}
+
 module.exports = {
   ensureInitialized,
   getAllArticles,
@@ -682,5 +729,6 @@ module.exports = {
   updateArticle,
   deleteArticle,
   formatPreviewCard,
-  clearStore
+  clearStore,
+  getScheduledArticlesDueToPublish
 };

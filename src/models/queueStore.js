@@ -33,19 +33,53 @@ function normalizeTaskRecord(row) {
  * @param {object} params Task creation parameters
  * @returns {Promise<object>} Created task record
  */
-async function enqueueTask({ articleId, taskType = 'dispatch_all', options = {}, maxAttempts = 5 }) {
+async function enqueueTask({
+  articleId,
+  taskType = 'dispatch_all',
+  options = {},
+  maxAttempts = 5,
+  nextRunAt,
+  publishAt,
+  scheduledAt,
+  next_run_at
+}) {
   const pool = db.getPool();
   const id = crypto.randomUUID();
   const now = new Date();
+
+  // Extract scheduling target date if provided
+  const targetTime = nextRunAt || publishAt || scheduledAt || next_run_at ||
+    (options && (options.nextRunAt || options.publishAt || options.scheduledAt || options.next_run_at));
+
+  let runAtDate = now;
+  if (targetTime) {
+    let parsedTs = typeof targetTime === 'number' ? targetTime : new Date(targetTime).getTime();
+    if (typeof targetTime === 'number' && targetTime < 1e11) {
+      parsedTs = targetTime * 1000;
+    } else if (typeof targetTime === 'string' && /^\d+$/.test(targetTime)) {
+      const num = Number(targetTime);
+      parsedTs = num < 1e11 ? num * 1000 : num;
+    }
+    if (!isNaN(parsedTs)) {
+      runAtDate = new Date(parsedTs);
+    }
+  }
+
+  // Separate internal control parameters from payload options
+  const cleanOptions = { ...(options || {}) };
+  delete cleanOptions.nextRunAt;
+  delete cleanOptions.publishAt;
+  delete cleanOptions.scheduledAt;
+  delete cleanOptions.next_run_at;
 
   if (pool) {
     try {
       const sql = `
         INSERT INTO dispatch_queue (id, article_id, task_type, options, status, attempts, max_attempts, next_run_at, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, 'pending', 0, $5, $6, $6, $6)
+        VALUES ($1, $2, $3, $4, 'pending', 0, $5, $6, $7, $7)
         RETURNING *;
       `;
-      const res = await pool.query(sql, [id, String(articleId), taskType, JSON.stringify(options), maxAttempts, now]);
+      const res = await pool.query(sql, [id, String(articleId), taskType, JSON.stringify(cleanOptions), maxAttempts, runAtDate, now]);
       if (res && res.rows && res.rows[0]) {
         return normalizeTaskRecord(res.rows[0]);
       }
@@ -60,13 +94,13 @@ async function enqueueTask({ articleId, taskType = 'dispatch_all', options = {},
     article_id: String(articleId),
     articleId: String(articleId),
     task_type: taskType,
-    options: options || {},
+    options: cleanOptions,
     status: 'pending',
     attempts: 0,
     max_attempts: maxAttempts,
     maxAttempts,
     last_error: null,
-    next_run_at: now.toISOString(),
+    next_run_at: runAtDate.toISOString(),
     created_at: now.toISOString(),
     updated_at: now.toISOString(),
     results: {}
@@ -318,6 +352,75 @@ async function clearQueue() {
   }
 }
 
+/**
+ * Releases tasks locked in 'processing' status longer than staleThresholdMs.
+ * Resets task status from 'processing' to 'pending'.
+ * 
+ * @param {number} [staleThresholdMs=600000] Stale lock expiration threshold in milliseconds (default: 10 minutes).
+ * @returns {Promise<Array<object>>} Recovered task records.
+ */
+async function recoverStaleLocks(staleThresholdMs = 10 * 60 * 1000) {
+  const pool = db.getPool();
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - staleThresholdMs);
+
+  if (pool) {
+    try {
+      const failSql = `
+        UPDATE dispatch_queue
+        SET status = 'failed',
+            last_error = 'Stale lock expired after reaching maximum attempts',
+            updated_at = $1
+        WHERE status = 'processing'
+          AND COALESCE(updated_at, created_at) <= $2
+          AND attempts >= max_attempts
+        RETURNING *;
+      `;
+      const failRes = await pool.query(failSql, [now, cutoff]);
+
+      const sql = `
+        UPDATE dispatch_queue
+        SET status = 'pending',
+            updated_at = $1
+        WHERE status = 'processing'
+          AND COALESCE(updated_at, created_at) <= $2
+          AND attempts < max_attempts
+        RETURNING *;
+      `;
+      const res = await pool.query(sql, [now, cutoff]);
+      const recoveredRows = [
+        ...(failRes && failRes.rows ? failRes.rows : []),
+        ...(res && res.rows ? res.rows : [])
+      ];
+      return recoveredRows.map(normalizeTaskRecord);
+    } catch (err) {
+      console.error('Database recoverStaleLocks error, using fallback:', err.message);
+    }
+  }
+
+  // Fallback in-memory stale lock recovery
+  const cutoffTs = cutoff.getTime();
+  const recovered = [];
+
+  for (const task of memoryQueue) {
+    if (task.status === 'processing') {
+      const updatedAtTs = new Date(task.updated_at || task.created_at).getTime();
+      if (updatedAtTs <= cutoffTs) {
+        if (task.attempts >= task.max_attempts) {
+          task.status = 'failed';
+          task.last_error = 'Stale lock expired after reaching maximum attempts';
+        } else {
+          task.status = 'pending';
+        }
+        task.updated_at = now.toISOString();
+        recovered.push(normalizeTaskRecord(task));
+      }
+    }
+  }
+
+  return recovered;
+}
+
 module.exports = {
   enqueueTask,
   claimPendingTasks,
@@ -326,5 +429,6 @@ module.exports = {
   getTaskById,
   getTasksByArticleId,
   getAllTasks,
-  clearQueue
+  clearQueue,
+  recoverStaleLocks
 };
