@@ -16,21 +16,23 @@ const DEFAULT_PRODUCTS = [
   {
     id: 'prod_featured_article',
     slug: 'featured-article',
-    name: 'Featured Article & Editorial Story',
-    description: 'In-depth storytelling written by 961 editorial staff and published across web & news feed.',
+    name: 'Featured Article Package',
+    description: 'Custom engaging article in 3 languages, Instagram Carousel, IG post shared to Stories, Facebook post, LinkedIn post, WhatsApp channel update',
     category: 'Editorial',
-    basePrice: 750,
-    unit: 'per article',
+    basePrice: 2000,
+    unit: 'per package',
     inclusions: [
-      'Full editorial article written by 961 staff',
-      'Permanent publication on 961.co',
-      'Social media broadcast on Facebook & X',
-      'Dofollow SEO backlinks'
+      'Custom engaging article in 3 languages',
+      'Instagram Carousel',
+      'IG post shared to Stories',
+      'Facebook post',
+      'LinkedIn post',
+      'WhatsApp channel update'
     ],
-    crossSellIds: ['prod_social_video', 'prod_newsletter_feature'],
+    crossSellIds: ['prod_social_video', 'addon_plus_2_articles'],
     crossSellReasons: {
       prod_social_video: 'Amplify editorial reach by 3x with a dedicated TikTok & Instagram Reel video.',
-      prod_newsletter_feature: 'Get instant day-one exposure by featuring in The961 Morning Brief.'
+      addon_plus_2_articles: 'Scale your campaign reach with 2 additional article packages.'
     }
   },
   {
@@ -116,21 +118,21 @@ const DEFAULT_PRODUCTS = [
 
 const DEFAULT_PRODUCT_COUNTRIES = [
   // Lebanon
-  { id: 'pc_fa_lb', productId: 'prod_featured_article', countryId: 'lb', price: 750, currency: 'USD', isAvailable: true },
+  { id: 'pc_fa_lb', productId: 'prod_featured_article', countryId: 'lb', price: 2000, currency: 'USD', isAvailable: true },
   { id: 'pc_sv_lb', productId: 'prod_social_video', countryId: 'lb', price: 950, currency: 'USD', isAvailable: true },
   { id: 'pc_db_lb', productId: 'prod_display_banner', countryId: 'lb', price: 300, currency: 'USD', isAvailable: true },
   { id: 'pc_nf_lb', productId: 'prod_newsletter_feature', countryId: 'lb', price: 450, currency: 'USD', isAvailable: true },
   { id: 'pc_sp_lb', productId: 'prod_dedicated_social_post', countryId: 'lb', price: 500, currency: 'USD', isAvailable: true },
 
   // Saudi Arabia
-  { id: 'pc_fa_sa', productId: 'prod_featured_article', countryId: 'sa', price: 1200, currency: 'USD', isAvailable: true },
+  { id: 'pc_fa_sa', productId: 'prod_featured_article', countryId: 'sa', price: 2000, currency: 'USD', isAvailable: true },
   { id: 'pc_sv_sa', productId: 'prod_social_video', countryId: 'sa', price: 1500, currency: 'USD', isAvailable: true },
   { id: 'pc_db_sa', productId: 'prod_display_banner', countryId: 'sa', price: 500, currency: 'USD', isAvailable: true },
   { id: 'pc_nf_sa', productId: 'prod_newsletter_feature', countryId: 'sa', price: 750, currency: 'USD', isAvailable: true },
   { id: 'pc_sp_sa', productId: 'prod_dedicated_social_post', countryId: 'sa', price: 800, currency: 'USD', isAvailable: true },
 
   // UAE
-  { id: 'pc_fa_ae', productId: 'prod_featured_article', countryId: 'ae', price: 1200, currency: 'USD', isAvailable: true },
+  { id: 'pc_fa_ae', productId: 'prod_featured_article', countryId: 'ae', price: 2000, currency: 'USD', isAvailable: true },
   { id: 'pc_sv_ae', productId: 'prod_social_video', countryId: 'ae', price: 1500, currency: 'USD', isAvailable: true },
   { id: 'pc_db_ae', productId: 'prod_display_banner', countryId: 'ae', price: 500, currency: 'USD', isAvailable: true },
   { id: 'pc_nf_ae', productId: 'prod_newsletter_feature', countryId: 'ae', price: 750, currency: 'USD', isAvailable: true },
@@ -138,6 +140,15 @@ const DEFAULT_PRODUCT_COUNTRIES = [
 ];
 
 const DEFAULT_ADDONS = [
+  {
+    id: 'addon_plus_2_articles',
+    slug: 'plus-2-article-packages',
+    name: '+2 Article Packages',
+    description: 'Add 2 additional Featured Article Packages.',
+    price: 2000,
+    unit: 'package',
+    compatibleProductIds: ['prod_featured_article']
+  },
   {
     id: 'addon_express_delivery',
     slug: 'express-delivery',

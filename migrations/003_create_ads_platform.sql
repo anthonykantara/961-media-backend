@@ -128,7 +128,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Seed Default Products
 INSERT INTO products (id, slug, name, description, category, base_price, unit, inclusions, cross_sell_ids, cross_sell_reasons) VALUES
-('prod_featured_article', 'featured-article', 'Featured Article & Editorial Story', 'In-depth storytelling written by 961 editorial staff and published across web & news feed.', 'Editorial', 750.00, 'per article', '["Full editorial article written by 961 staff", "Permanent publication on 961.co", "Social media broadcast on Facebook & X", "Dofollow SEO backlinks"]'::jsonb, '["prod_social_video", "prod_newsletter_feature"]'::jsonb, '{"prod_social_video": "Amplify editorial reach by 3x with a dedicated TikTok & Instagram Reel video.", "prod_newsletter_feature": "Get instant day-one exposure by featuring in The961 Morning Brief."}'::jsonb),
+('prod_featured_article', 'featured-article', 'Featured Article Package', 'Custom engaging article in 3 languages, Instagram Carousel, IG post shared to Stories, Facebook post, LinkedIn post, WhatsApp channel update', 'Editorial', 2000.00, 'per package', '["Custom engaging article in 3 languages", "Instagram Carousel", "IG post shared to Stories", "Facebook post", "LinkedIn post", "WhatsApp channel update"]'::jsonb, '["prod_social_video", "addon_plus_2_articles"]'::jsonb, '{"prod_social_video": "Amplify editorial reach by 3x with a dedicated TikTok & Instagram Reel video.", "addon_plus_2_articles": "Scale your campaign reach with 2 additional article packages."}'::jsonb),
 ('prod_social_video', 'social-video', 'Dedicated Social Video Reel / TikTok', 'High-impact short-form video produced or formatted for 961 Instagram Reel & TikTok channels.', 'Social', 950.00, 'per video', '["1080x1920 HD vertical video reel", "Published on 961 Instagram & TikTok", "Interactive story highlight placement", "Targeted audience engagement report"]'::jsonb, '["prod_featured_article", "addon_express_delivery"]'::jsonb, '{"prod_featured_article": "Pair your video with a long-form article for permanent Google SEO ranking.", "addon_express_delivery": "Publish within 24 hours of brief approval with express queue processing."}'::jsonb),
 ('prod_display_banner', 'display-banner', 'Responsive Display Banner Network', 'High-visibility Leaderboard (728x90) and MPU (300x250) banner impressions across key article pages.', 'Display', 300.00, 'per 10,000 impressions', '["Leaderboard & MPU banner ad slots", "Geo-targeted audience delivery", "Real-time CTR and impression analytics", "Desktop & Mobile optimization"]'::jsonb, '["prod_featured_article", "prod_newsletter_feature"]'::jsonb, '{"prod_featured_article": "Drive targeted traffic directly from display banners to your featured article.", "prod_newsletter_feature": "Extend banner exposure to high-intent email subscribers."}'::jsonb),
 ('prod_newsletter_feature', 'newsletter-feature', 'Daily Morning Brief Newsletter Sponsor', 'Top header takeover or dedicated sponsored story segment in 961 daily morning newsletter.', 'Newsletter', 450.00, 'per edition', '["Top header logo takeover & headline blurb", "Direct URL tracking link", "Delivered to 45,000+ active subscribers", "50%+ average open rate"]'::jsonb, '["prod_featured_article", "addon_translation"]'::jsonb, '{"prod_featured_article": "Link newsletter readers to a comprehensive editorial feature story.", "addon_translation": "Reach Arabic & French readers with localized newsletter editions."}'::jsonb),
@@ -137,17 +137,17 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Seed Default Product Countries
 INSERT INTO product_countries (id, product_id, country_id, price, currency, is_available) VALUES
-('pc_fa_lb', 'prod_featured_article', 'lb', 750.00, 'USD', true),
+('pc_fa_lb', 'prod_featured_article', 'lb', 2000.00, 'USD', true),
 ('pc_sv_lb', 'prod_social_video', 'lb', 950.00, 'USD', true),
 ('pc_db_lb', 'prod_display_banner', 'lb', 300.00, 'USD', true),
 ('pc_nf_lb', 'prod_newsletter_feature', 'lb', 450.00, 'USD', true),
 ('pc_sp_lb', 'prod_dedicated_social_post', 'lb', 500.00, 'USD', true),
-('pc_fa_sa', 'prod_featured_article', 'sa', 1200.00, 'USD', true),
+('pc_fa_sa', 'prod_featured_article', 'sa', 2000.00, 'USD', true),
 ('pc_sv_sa', 'prod_social_video', 'sa', 1500.00, 'USD', true),
 ('pc_db_sa', 'prod_display_banner', 'sa', 500.00, 'USD', true),
 ('pc_nf_sa', 'prod_newsletter_feature', 'sa', 750.00, 'USD', true),
 ('pc_sp_sa', 'prod_dedicated_social_post', 'sa', 800.00, 'USD', true),
-('pc_fa_ae', 'prod_featured_article', 'ae', 1200.00, 'USD', true),
+('pc_fa_ae', 'prod_featured_article', 'ae', 2000.00, 'USD', true),
 ('pc_sv_ae', 'prod_social_video', 'ae', 1500.00, 'USD', true),
 ('pc_db_ae', 'prod_display_banner', 'ae', 500.00, 'USD', true),
 ('pc_nf_ae', 'prod_newsletter_feature', 'ae', 750.00, 'USD', true),
@@ -156,6 +156,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Seed Default Add-Ons
 INSERT INTO add_ons (id, slug, name, description, price, unit, compatible_product_ids) VALUES
+('addon_plus_2_articles', 'plus-2-article-packages', '+2 Article Packages', 'Add 2 additional Featured Article Packages.', 2000.00, 'package', '["prod_featured_article"]'::jsonb),
 ('addon_express_delivery', 'express-delivery', 'Express 24-Hour Production & Delivery', 'Fast-track content creation and publish within 24 hours of brief approval.', 250.00, 'one-time', '["prod_featured_article", "prod_social_video", "prod_dedicated_social_post"]'::jsonb),
 ('addon_translation', 'multilingual-translation', 'Multilingual Translation (Arabic / French)', 'Professional translation and localized content adaptation into Arabic and French.', 150.00, 'per language', '["prod_featured_article", "prod_newsletter_feature"]'::jsonb),
 ('addon_creative_design', 'creative-design', 'Custom Graphics & Creative Design', '961 in-house design team creates custom graphic banners and story visual assets.', 200.00, 'one-time', '["prod_display_banner", "prod_social_video", "prod_dedicated_social_post"]'::jsonb),

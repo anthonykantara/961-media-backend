@@ -26,7 +26,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
 
     const featuredArticle = res.body.products.find(p => p.slug === 'featured-article');
     expect(featuredArticle).toBeDefined();
-    expect(featuredArticle.price).toEqual(750);
+    expect(featuredArticle.price).toEqual(2000);
     expect(Array.isArray(featuredArticle.inclusions)).toBe(true);
 
     expect(res.body).toHaveProperty('deterministicCrossSells');
@@ -37,7 +37,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
     expect(saRes.statusCode).toEqual(200);
     expect(saRes.body.activeCountry.code).toEqual('SA');
     const saFeaturedArticle = saRes.body.products.find(p => p.slug === 'featured-article');
-    expect(saFeaturedArticle.price).toEqual(1200);
+    expect(saFeaturedArticle.price).toEqual(2000);
   });
 
   it('POST /api/v1/campaigns/lead captures advertiser info and generates draft campaign with token', async () => {
@@ -48,9 +48,9 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       brand: 'Acme Corp',
       objective: 'Brand Awareness',
       countryId: 'lb',
-      totalAmount: 1700,
+      totalAmount: 2950,
       items: [
-        { productId: 'prod_featured_article', unitPrice: 750, quantity: 1, totalPrice: 750 },
+        { productId: 'prod_featured_article', unitPrice: 2000, quantity: 1, totalPrice: 2000 },
         { productId: 'prod_social_video', unitPrice: 950, quantity: 1, totalPrice: 950 }
       ]
     };
@@ -64,7 +64,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
     expect(res.body).toHaveProperty('accessToken');
     expect(res.body.accessToken).toMatch(/^cmp_tok_/);
     expect(res.body.campaign.status).toEqual('lead_captured');
-    expect(res.body.campaign.totalAmount).toEqual(1700);
+    expect(res.body.campaign.totalAmount).toEqual(2950);
   });
 
   it('POST /api/v1/campaigns/lead auto-calculates totalAmount if omitted from payload', async () => {
@@ -73,7 +73,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       email: 'sam@shop.com',
       brand: 'Sam Shop',
       items: [
-        { productId: 'prod_featured_article', unitPrice: 750, quantity: 2 },
+        { productId: 'prod_featured_article', unitPrice: 2000, quantity: 2 },
         { productId: 'prod_display_banner', unitPrice: 300, quantity: 1 }
       ]
     };
@@ -83,7 +83,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       .send(payload);
 
     expect(res.statusCode).toEqual(201);
-    expect(res.body.campaign.totalAmount).toEqual(1800);
+    expect(res.body.campaign.totalAmount).toEqual(4300);
   });
 
   it('POST /api/v1/campaigns/upload handles temporary uploads under Wasabi campaigns/temporary/{session_id}/', async () => {
