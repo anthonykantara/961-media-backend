@@ -18,13 +18,13 @@ dotenv.config();
 const app = express();
 
 // Configure trust proxy for reverse proxy deployments (e.g. Nginx, Cloudflare)
-if (process.env.TRUST_PROXY) {
+if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== '') {
   const trustProxy = process.env.TRUST_PROXY;
   if (trustProxy === 'true') {
     app.set('trust proxy', true);
   } else if (trustProxy === 'false') {
     app.set('trust proxy', false);
-  } else if (!isNaN(Number(trustProxy))) {
+  } else if (!isNaN(Number(trustProxy)) && trustProxy.trim() !== '') {
     app.set('trust proxy', Number(trustProxy));
   } else {
     app.set('trust proxy', trustProxy);
@@ -78,6 +78,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+// Check if a request targets high-cost AI pipeline or rendering endpoints
+const isPipelineRoute = (req) => {
+  const url = req.originalUrl || req.url || req.path || '';
+  return url.startsWith('/api/pipeline') ||
+         url.startsWith('/api/express-creation') ||
+         url.startsWith('/api/articles/express-creation');
+};
+
 // Rate limit skip condition (allows disabling rate limiting in tests unless explicitly enabled)
 const shouldSkipRateLimit = (req) => {
   if (process.env.DISABLE_RATE_LIMITING === 'true') {
@@ -89,10 +97,22 @@ const shouldSkipRateLimit = (req) => {
   return false;
 };
 
+// Public rate limit skip condition (also skips pipeline routes to avoid tier header collisions)
+const shouldSkipPublicRateLimit = (req) => {
+  if (shouldSkipRateLimit(req)) {
+    return true;
+  }
+  return isPipelineRoute(req);
+};
+
 // High-cost AI pipeline rate limiter
+const pipelineWindowMs = parseInt(process.env.RATE_LIMIT_PIPELINE_WINDOW_MS, 10);
 const pipelineRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: (req, res) => parseInt(process.env.RATE_LIMIT_PIPELINE_MAX, 10) || 20,
+  windowMs: !isNaN(pipelineWindowMs) && pipelineWindowMs > 0 ? pipelineWindowMs : 15 * 60 * 1000,
+  max: (req, res) => {
+    const val = parseInt(process.env.RATE_LIMIT_PIPELINE_MAX, 10);
+    return !isNaN(val) ? val : 20;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   skip: shouldSkipRateLimit,
@@ -105,12 +125,16 @@ const pipelineRateLimiter = rateLimit({
 });
 
 // General public API rate limiter
+const publicWindowMs = parseInt(process.env.RATE_LIMIT_PUBLIC_WINDOW_MS, 10);
 const publicRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: (req, res) => parseInt(process.env.RATE_LIMIT_PUBLIC_MAX, 10) || 100,
+  windowMs: !isNaN(publicWindowMs) && publicWindowMs > 0 ? publicWindowMs : 15 * 60 * 1000,
+  max: (req, res) => {
+    const val = parseInt(process.env.RATE_LIMIT_PUBLIC_MAX, 10);
+    return !isNaN(val) ? val : 100;
+  },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: shouldSkipRateLimit,
+  skip: shouldSkipPublicRateLimit,
   handler: (req, res, next, options) => {
     res.status(429).json({
       error: 'Too Many Requests',
