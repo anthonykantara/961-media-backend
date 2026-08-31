@@ -8,6 +8,8 @@ const path = require('path');
 const fs = require('fs');
 const app = require('../src/app');
 const imageEngine = require('../src/services/imageEngine');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('Express Creation Image Manipulation Engine & API', () => {
   jest.setTimeout(25000); // Allow sufficient time for Pillow engine processing
@@ -103,6 +105,7 @@ describe('Express Creation Image Manipulation Engine & API', () => {
 
       const res = await request(app)
         .post('/api/express-creation')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -126,6 +129,7 @@ describe('Express Creation Image Manipulation Engine & API', () => {
 
       const res = await request(app)
         .post('/api/express-creation')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(200);
@@ -141,6 +145,7 @@ describe('Express Creation Image Manipulation Engine & API', () => {
 
       const res = await request(app)
         .post('/api/articles/express-creation')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(200);

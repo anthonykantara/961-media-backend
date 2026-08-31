@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const locationStore = require('../models/locationStore');
+const { authenticateJwt, requireRole, auditLogger } = require('../middleware/auth');
 
 function validateLocationData(data, isUpdate = false) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -80,7 +81,7 @@ router.get('/:id', async (req, res, next) => {
  * POST /api/locations
  * Creates a new location.
  */
-router.post('/', async (req, res, next) => {
+router.post('/', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const errors = validateLocationData(req.body, false);
     if (errors.length > 0) {
@@ -101,7 +102,7 @@ router.post('/', async (req, res, next) => {
  * PUT /api/locations/:id
  * Updates an existing location.
  */
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const existing = await locationStore.getLocationById(id);
@@ -125,7 +126,7 @@ router.put('/:id', async (req, res, next) => {
  * PATCH /api/locations/:id
  * Partial update location.
  */
-router.patch('/:id', async (req, res, next) => {
+router.patch('/:id', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const existing = await locationStore.getLocationById(id);
@@ -149,7 +150,7 @@ router.patch('/:id', async (req, res, next) => {
  * DELETE /api/locations/:id
  * Deletes a location.
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const deleted = await locationStore.deleteLocation(id);

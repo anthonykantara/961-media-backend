@@ -6,6 +6,8 @@ process.env.DASHBOARD_URL = 'http://localhost:3001';
 const request = require('supertest');
 const app = require('../src/app');
 const articleStore = require('../src/models/articleStore');
+const { getAuthHeader } = require('./testUtils');
+const adminHeaders = getAuthHeader({ role: 'Admin' });
 
 describe('Articles API Endpoints', () => {
   beforeEach(async () => {
@@ -58,6 +60,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(201);
@@ -84,6 +87,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(400);
@@ -98,6 +102,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(400);
@@ -114,6 +119,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send(payload);
 
       expect(res.status).toBe(400);
@@ -161,6 +167,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .put(`/api/articles/${created.id}`)
+        .set(adminHeaders)
         .send(updatePayload);
 
       expect(res.status).toBe(200);
@@ -180,6 +187,7 @@ describe('Articles API Endpoints', () => {
     it('should return 404 if the article ID does not exist', async () => {
       const res = await request(app)
         .put('/api/articles/non-existent-id')
+        .set(adminHeaders)
         .send({ title: 'New title' });
 
       expect(res.status).toBe(404);
@@ -194,6 +202,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .put(`/api/articles/${created.id}`)
+        .set(adminHeaders)
         .send({ title: '', content: 12345 });
 
       expect(res.status).toBe(400);
@@ -210,7 +219,9 @@ describe('Articles API Endpoints', () => {
         content: 'Delete me.'
       });
 
-      const res = await request(app).delete(`/api/articles/${created.id}`);
+      const res = await request(app)
+        .delete(`/api/articles/${created.id}`)
+        .set(adminHeaders);
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Article successfully deleted.');
       expect(res.body.id).toBe(created.id);
@@ -221,7 +232,9 @@ describe('Articles API Endpoints', () => {
     });
 
     it('should return 404 if the article to delete does not exist', async () => {
-      const res = await request(app).delete('/api/articles/another-fake-id');
+      const res = await request(app)
+        .delete('/api/articles/another-fake-id')
+        .set(adminHeaders);
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('Article with ID another-fake-id not found.');
     });
@@ -328,6 +341,7 @@ describe('Articles API Endpoints', () => {
     it('should accept imageUrl and synchronize it with image property', async () => {
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send({
           title: 'Image Test Article',
           content: 'Test content with imageUrl',
@@ -361,6 +375,7 @@ describe('Articles API Endpoints', () => {
     it('should generate permalink and slug automatically on article creation', async () => {
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send({
           title: 'Top 10 Hidden Gems in Beirut!',
           content: 'Full article body content.'
@@ -378,6 +393,7 @@ describe('Articles API Endpoints', () => {
     it('should allow custom permalink or slug overrides on creation', async () => {
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send({
           title: 'Unrelated Title',
           content: 'Content here...',
@@ -398,6 +414,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .put(`/api/articles/${created.id}`)
+        .set(adminHeaders)
         .send({
           title: 'Updated Article Title for 2026'
         });
@@ -415,6 +432,7 @@ describe('Articles API Endpoints', () => {
 
       const res = await request(app)
         .patch(`/api/articles/${created.id}`)
+        .set(adminHeaders)
         .send({
           permalink: 'explicit-new-permalink-slug'
         });
@@ -467,6 +485,7 @@ describe('Articles API Endpoints', () => {
     it('should reject non-string permalink values with validation error', async () => {
       const res = await request(app)
         .post('/api/articles')
+        .set(adminHeaders)
         .send({
           title: 'Test Title',
           content: 'Test content',
@@ -491,6 +510,7 @@ describe('Articles API Endpoints', () => {
       // 2. Update the headline (title changed after publishing)
       const updateRes = await request(app)
         .put(`/api/articles/${created.id}`)
+        .set(adminHeaders)
         .send({
           title: 'New Updated Article Headline for SEO Test'
         });
@@ -536,11 +556,11 @@ describe('Articles API Endpoints', () => {
       const slug1 = article.permalink;
 
       // Update to Version 2
-      await request(app).put(`/api/articles/${article.id}`).send({ title: 'Headline Version 2' });
+      await request(app).put(`/api/articles/${article.id}`).set(adminHeaders).send({ title: 'Headline Version 2' });
       const slug2 = 'headline-version-2';
 
       // Update to Version 3
-      const v3Res = await request(app).put(`/api/articles/${article.id}`).send({ title: 'Headline Version 3' });
+      const v3Res = await request(app).put(`/api/articles/${article.id}`).set(adminHeaders).send({ title: 'Headline Version 3' });
       const slug3 = 'headline-version-3';
 
       expect(v3Res.body.permalink).toBe(slug3);

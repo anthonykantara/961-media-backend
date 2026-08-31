@@ -5,6 +5,8 @@ process.env.DASHBOARD_URL = 'http://localhost:3001';
 const request = require('supertest');
 const app = require('../src/app');
 const languageStore = require('../src/models/languageStore');
+const { getAuthHeader } = require('./testUtils');
+const editorHeaders = getAuthHeader({ role: 'Editor' });
 
 describe('Language Registry & Localization Sync API', () => {
   beforeEach(async () => {
@@ -54,6 +56,7 @@ describe('Language Registry & Localization Sync API', () => {
 
       const postRes = await request(app)
         .post('/api/languages')
+        .set(editorHeaders)
         .send(newLang);
 
       expect(postRes.status).toBe(201);
@@ -70,6 +73,7 @@ describe('Language Registry & Localization Sync API', () => {
     it('should fail validation if code or name is missing', async () => {
       const res = await request(app)
         .post('/api/languages')
+        .set(editorHeaders)
         .send({ dir: 'ltr' });
 
       expect(res.status).toBe(400);
@@ -79,6 +83,7 @@ describe('Language Registry & Localization Sync API', () => {
     it('should reject duplicate language codes with 409', async () => {
       const res = await request(app)
         .post('/api/languages')
+        .set(editorHeaders)
         .send({ code: 'en', name: 'English Duplicate' });
 
       expect(res.status).toBe(409);
@@ -89,6 +94,7 @@ describe('Language Registry & Localization Sync API', () => {
     it('should update language properties and enable/disable languages', async () => {
       const patchRes = await request(app)
         .patch('/api/languages/fr')
+        .set(editorHeaders)
         .send({ enabled: false });
 
       expect(patchRes.status).toBe(200);
@@ -103,6 +109,7 @@ describe('Language Registry & Localization Sync API', () => {
     it('should return 404 for non-existent language code', async () => {
       const res = await request(app)
         .put('/api/languages/xx')
+        .set(editorHeaders)
         .send({ name: 'Unknown' });
 
       expect(res.status).toBe(404);
@@ -138,7 +145,9 @@ describe('Language Registry & Localization Sync API', () => {
 
   describe('DELETE /api/languages/:code', () => {
     it('should delete a language', async () => {
-      const res = await request(app).delete('/api/languages/fr');
+      const res = await request(app)
+        .delete('/api/languages/fr')
+        .set(editorHeaders);
       expect(res.status).toBe(200);
       expect(res.body.message).toBe('Language successfully deleted.');
 
