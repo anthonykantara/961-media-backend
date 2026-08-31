@@ -20,7 +20,7 @@ function getPool() {
 }
 
 async function query(text, params) {
-  const activePool = getPool();
+  const activePool = module.exports.getPool();
   if (!activePool) {
     return null;
   }
@@ -28,17 +28,34 @@ async function query(text, params) {
 }
 
 async function runMigrations() {
-  const activePool = getPool();
+  const activePool = module.exports.getPool();
   if (!activePool) {
     return false;
   }
   try {
+    await activePool.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     const migrationsDir = path.join(__dirname, '../../migrations');
     const files = await fs.readdir(migrationsDir);
     const sqlFiles = files.filter(f => f.endsWith('.sql')).sort();
     for (const file of sqlFiles) {
+      const checkRes = await activePool.query(
+        'SELECT filename FROM schema_migrations WHERE filename = $1;',
+        [file]
+      );
+      if (checkRes && checkRes.rows && checkRes.rows.length > 0) {
+        continue;
+      }
       const sql = await fs.readFile(path.join(migrationsDir, file), 'utf8');
       await activePool.query(sql);
+      await activePool.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING;',
+        [file]
+      );
     }
     return true;
   } catch (err) {

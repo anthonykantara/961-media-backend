@@ -1,10 +1,6 @@
-const fs = require('fs').promises;
-const path = require('path');
 const crypto = require('crypto');
+const db = require('../db');
 const { generatePermalink } = require('../utils/permalink');
-
-const DATA_DIR = path.join(__dirname, '../../data');
-const FILE_PATH = path.join(DATA_DIR, process.env.NODE_ENV === 'test' ? 'articles.test.json' : 'articles.json');
 
 const DEFAULT_SEED_ARTICLES = [
   {
@@ -101,343 +97,540 @@ const DEFAULT_SEED_ARTICLES = [
   }
 ];
 
-let writeQueue = Promise.resolve();
-let queue = Promise.resolve();
+let memoryArticles = [];
 
-function enqueue(fn) {
-  const res = queue.then(() => fn());
-  queue = res.catch(() => {});
-  return res;
+function parseArrayField(field) {
+  if (Array.isArray(field)) return field;
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
 }
 
-/**
- * Ensures that the data directory and the articles.json file exist.
- * If they do not exist, they are created with initial seed data.
- */
+function formatArticleRecord(row) {
+  if (!row) return null;
+  const redirects = parseArrayField(row.redirects);
+  const previousPermalinks = parseArrayField(row.previous_permalinks || row.previousPermalinks || row.redirects);
+  const imgVal = row.image || row.image_url || row.imageUrl || '';
+  const permalinkVal = row.permalink || row.slug || '';
+
+  return {
+    id: row.id,
+    title: row.title || '',
+    permalink: permalinkVal,
+    slug: permalinkVal,
+    redirects,
+    previousPermalinks: redirects,
+    content: row.content || '',
+    summary: row.summary || '',
+    author: row.author || '',
+    category: row.category || '',
+    image: imgVal,
+    imageUrl: imgVal,
+    status: row.status || 'draft',
+    locationId: row.location_id || row.locationId || 'lb',
+    language: row.language || 'en',
+    date: row.date || '',
+    time: row.time || '',
+    views: String(row.views !== undefined ? row.views : '0'),
+    shares: String(row.shares !== undefined ? row.shares : '0'),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : (row.createdAt || new Date().toISOString()),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : (row.updatedAt || new Date().toISOString())
+  };
+}
+
 async function ensureInitialized() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (err) {
-    // Directory creation failed or already exists
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT COUNT(*) FROM articles;');
+      if (res && res.rows && parseInt(res.rows[0].count, 10) === 0 && process.env.NODE_ENV !== 'test') {
+        for (const a of DEFAULT_SEED_ARTICLES) {
+          await pool.query(
+            `INSERT INTO articles (
+               id, title, permalink, slug, redirects, previous_permalinks, content, summary,
+               author, category, image, image_url, status, location_id, language, date, time,
+               views, shares, created_at, updated_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+             ON CONFLICT (id) DO NOTHING;`,
+            [
+              a.id, a.title, a.permalink, a.slug, JSON.stringify(a.redirects), JSON.stringify(a.previousPermalinks),
+              a.content, a.summary, a.author, a.category, a.image, a.imageUrl, a.status,
+              a.locationId, a.language, a.date, a.time, String(a.views), String(a.shares),
+              a.createdAt, a.updatedAt
+            ]
+          );
+        }
+      }
+      return;
+    } catch (err) {
+      // Fallback
+    }
   }
 
-  try {
-    await fs.access(FILE_PATH);
-  } catch (err) {
-    // File does not exist, initialize it
-    const initialData = process.env.NODE_ENV === 'test' ? [] : DEFAULT_SEED_ARTICLES;
-    await fs.writeFile(FILE_PATH, JSON.stringify(initialData, null, 2), 'utf8');
+  if (memoryArticles.length === 0 && process.env.NODE_ENV !== 'test') {
+    memoryArticles = DEFAULT_SEED_ARTICLES.map(a => formatArticleRecord(a));
   }
 }
 
-/**
- * Reads all articles from the persistence store.
- * @returns {Promise<Array>} List of articles.
- */
-async function getAll() {
-  await ensureInitialized();
-  try {
-    const data = await fs.readFile(FILE_PATH, 'utf8');
-    return JSON.parse(data);
-  } catch (err) {
-    // If reading or parsing fails, return empty array
-    return [];
-  }
-}
-
-/**
- * Saves articles list atomically to the persistence store.
- * @param {Array} articles List of articles to save.
- */
-async function saveAll(articles) {
-  await ensureInitialized();
-  writeQueue = writeQueue.then(async () => {
-    const tempPath = `${FILE_PATH}.tmp.${Date.now()}.${crypto.randomBytes(4).toString('hex')}`;
-    await fs.writeFile(tempPath, JSON.stringify(articles, null, 2), 'utf8');
-    await fs.rename(tempPath, FILE_PATH);
-  }).catch(err => {
-    console.error('Failed to save article store:', err);
-  });
-  return writeQueue;
-}
-
-/**
- * Fetches all articles, sorted by createdAt descending (newest first).
- * @returns {Promise<Array>} List of articles.
- */
 async function getAllArticles() {
-  const articles = await getAll();
-  return articles.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  await ensureInitialized();
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('SELECT * FROM articles ORDER BY created_at DESC;');
+      if (res && res.rows) {
+        return res.rows.map(formatArticleRecord);
+      }
+    } catch (err) {
+      console.error('Database getAllArticles error, using fallback:', err.message);
+    }
+  }
+
+  return memoryArticles.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(formatArticleRecord);
 }
 
-/**
- * Fetches a single article by its unique ID or permalink/slug/redirect.
- * @param {string} id Unique article ID, permalink, slug, or old redirect permalink.
- * @returns {Promise<Object|null>} The article, or null if not found.
- */
 async function getArticleById(id) {
-  const articles = await getAll();
   if (!id) return null;
-  const lower = id.toLowerCase();
-  const article = articles.find(a =>
+  const lower = String(id).toLowerCase();
+  const pool = db.getPool();
+
+  if (pool) {
+    try {
+      const sql = `
+        SELECT * FROM articles
+        WHERE id = $1
+           OR LOWER(permalink) = $2
+           OR LOWER(slug) = $2
+           OR redirects @> jsonb_build_array($2::text)
+           OR previous_permalinks @> jsonb_build_array($2::text)
+           OR id IN (SELECT article_id FROM article_redirects WHERE LOWER(old_permalink) = $2)
+        LIMIT 1;
+      `;
+      const res = await pool.query(sql, [id, lower]);
+      if (res && res.rows && res.rows[0]) {
+        return formatArticleRecord(res.rows[0]);
+      }
+      return null;
+    } catch (err) {
+      console.error('Database getArticleById error, using fallback:', err.message);
+    }
+  }
+
+  const article = memoryArticles.find(a =>
     a.id === id ||
     (a.permalink || '').toLowerCase() === lower ||
     (a.slug || '').toLowerCase() === lower ||
     (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lower)) ||
     (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lower))
   );
-  return article || null;
+  return article ? formatArticleRecord(article) : null;
 }
 
-/**
- * Resolves an article lookup, determining if it matched directly or via an auto-redirect.
- * @param {string} id Article ID, permalink, or old permalink/slug.
- * @returns {Promise<{ article: Object, isRedirect: boolean, targetPermalink: string }|null>}
- */
 async function findArticleWithRedirect(id) {
-  const articles = await getAll();
   if (!id) return null;
-  const lower = id.toLowerCase();
+  const lower = String(id).toLowerCase();
+  const pool = db.getPool();
 
-  // 1. Direct match on id, permalink, or slug
-  const directMatch = articles.find(a =>
+  if (pool) {
+    try {
+      // 1. Direct match
+      const directSql = `
+        SELECT * FROM articles
+        WHERE id = $1 OR LOWER(permalink) = $2 OR LOWER(slug) = $2
+        LIMIT 1;
+      `;
+      const directRes = await pool.query(directSql, [id, lower]);
+      if (directRes && directRes.rows && directRes.rows[0]) {
+        const art = formatArticleRecord(directRes.rows[0]);
+        return {
+          article: art,
+          isRedirect: false,
+          targetPermalink: art.permalink || art.slug
+        };
+      }
+
+      // 2. Redirect match
+      const redirectSql = `
+        SELECT * FROM articles
+        WHERE redirects @> jsonb_build_array($1::text)
+           OR previous_permalinks @> jsonb_build_array($1::text)
+           OR id IN (SELECT article_id FROM article_redirects WHERE LOWER(old_permalink) = $1)
+        LIMIT 1;
+      `;
+      const redirectRes = await pool.query(redirectSql, [lower]);
+      if (redirectRes && redirectRes.rows && redirectRes.rows[0]) {
+        const art = formatArticleRecord(redirectRes.rows[0]);
+        return {
+          article: art,
+          isRedirect: true,
+          targetPermalink: art.permalink || art.slug
+        };
+      }
+
+      return null;
+    } catch (err) {
+      console.error('Database findArticleWithRedirect error, using fallback:', err.message);
+    }
+  }
+
+  // Fallback in-memory logic
+  const directMatch = memoryArticles.find(a =>
     a.id === id ||
     (a.permalink || '').toLowerCase() === lower ||
     (a.slug || '').toLowerCase() === lower
   );
   if (directMatch) {
+    const art = formatArticleRecord(directMatch);
     return {
-      article: directMatch,
+      article: art,
       isRedirect: false,
-      targetPermalink: directMatch.permalink || directMatch.slug
+      targetPermalink: art.permalink || art.slug
     };
   }
 
-  // 2. Redirect match on redirects / previousPermalinks array
-  const redirectMatch = articles.find(a =>
+  const redirectMatch = memoryArticles.find(a =>
     (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lower)) ||
     (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lower))
   );
   if (redirectMatch) {
+    const art = formatArticleRecord(redirectMatch);
     return {
-      article: redirectMatch,
+      article: art,
       isRedirect: true,
-      targetPermalink: redirectMatch.permalink || redirectMatch.slug
+      targetPermalink: art.permalink || art.slug
     };
   }
 
   return null;
 }
 
-/**
- * Returns a map/dictionary of all active redirects mapping old permalinks to new permalinks.
- * @returns {Promise<Object>} Object mapping oldPermalink -> newPermalink
- */
 async function getAllRedirects() {
-  const articles = await getAll();
+  const pool = db.getPool();
   const redirectMap = {};
-  articles.forEach(a => {
-    const currentPermalink = a.permalink || a.slug;
-    const redirects = Array.isArray(a.redirects)
+
+  if (pool) {
+    try {
+      const sql = 'SELECT old_permalink, target_permalink FROM article_redirects;';
+      const res = await pool.query(sql);
+      if (res && res.rows) {
+        res.rows.forEach(r => {
+          redirectMap[r.old_permalink] = r.target_permalink;
+        });
+      }
+      const allArtsRes = await pool.query('SELECT permalink, slug, redirects, previous_permalinks FROM articles;');
+      if (allArtsRes && allArtsRes.rows) {
+        allArtsRes.rows.forEach(a => {
+          const target = a.permalink || a.slug;
+          const redirectsArr = parseArrayField(a.redirects).concat(parseArrayField(a.previous_permalinks));
+          redirectsArr.forEach(oldP => {
+            if (oldP && oldP !== target) {
+              redirectMap[oldP] = target;
+            }
+          });
+        });
+      }
+      return redirectMap;
+    } catch (err) {
+      console.error('Database getAllRedirects error, using fallback:', err.message);
+    }
+  }
+
+  memoryArticles.forEach(a => {
+    const target = a.permalink || a.slug;
+    const redirectsArr = Array.isArray(a.redirects)
       ? a.redirects
       : (Array.isArray(a.previousPermalinks) ? a.previousPermalinks : []);
-    redirects.forEach(oldP => {
-      if (oldP && oldP !== currentPermalink) {
-        redirectMap[oldP] = currentPermalink;
+    redirectsArr.forEach(oldP => {
+      if (oldP && oldP !== target) {
+        redirectMap[oldP] = target;
       }
     });
   });
+
   return redirectMap;
 }
 
-/**
- * Fetches a single article by its permalink or slug.
- * @param {string} permalink Article permalink or slug.
- * @returns {Promise<Object|null>} The article, or null if not found.
- */
 async function getArticleByPermalink(permalink) {
   return getArticleById(permalink);
 }
 
-/**
- * Creates a new article in the store.
- * @param {Object} articleData Input article details.
- * @returns {Promise<Object>} The newly created article.
- */
 async function createArticle(articleData) {
-  return enqueue(async () => {
-    const articles = await getAll();
+  const now = new Date().toISOString();
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const now = new Date().toISOString();
-    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const imageVal = articleData.image || articleData.imageUrl || '';
+  const rawPermalink = articleData.permalink || articleData.slug || articleData.title || '';
+  const permalinkVal = generatePermalink(rawPermalink);
 
-    const imageVal = articleData.image || articleData.imageUrl || '';
-    const rawPermalink = articleData.permalink || articleData.slug || articleData.title || '';
-    const permalinkVal = generatePermalink(rawPermalink);
+  const initialRedirects = Array.isArray(articleData.redirects)
+    ? articleData.redirects
+    : (Array.isArray(articleData.previousPermalinks) ? articleData.previousPermalinks : []);
 
-    const initialRedirects = Array.isArray(articleData.redirects)
-      ? articleData.redirects
-      : (Array.isArray(articleData.previousPermalinks) ? articleData.previousPermalinks : []);
+  const cleanRedirects = Array.from(new Set(initialRedirects)).filter(r => r && r !== permalinkVal);
 
-    const cleanRedirects = Array.from(new Set(initialRedirects)).filter(r => r && r !== permalinkVal);
+  const id = articleData.id || crypto.randomUUID();
 
-    const newArticle = {
-      id: articleData.id || crypto.randomUUID(),
-      title: articleData.title,
-      permalink: permalinkVal,
-      slug: permalinkVal,
-      redirects: cleanRedirects,
-      previousPermalinks: cleanRedirects,
-      content: articleData.content || '',
-      summary: articleData.summary || '',
-      author: articleData.author || '',
-      category: articleData.category || '',
-      image: imageVal,
-      imageUrl: imageVal,
-      status: articleData.status || 'draft',
-      locationId: articleData.locationId || 'lb',
-      language: articleData.language || 'en',
-      date: articleData.date || dateStr,
-      time: articleData.time || timeStr,
-      views: articleData.views !== undefined ? String(articleData.views) : '0',
-      shares: articleData.shares !== undefined ? String(articleData.shares) : '0',
-      createdAt: now,
-      updatedAt: now
-    };
+  const newArticle = {
+    id,
+    title: articleData.title,
+    permalink: permalinkVal,
+    slug: permalinkVal,
+    redirects: cleanRedirects,
+    previousPermalinks: cleanRedirects,
+    content: articleData.content || '',
+    summary: articleData.summary || '',
+    author: articleData.author || '',
+    category: articleData.category || '',
+    image: imageVal,
+    imageUrl: imageVal,
+    status: articleData.status || 'draft',
+    locationId: articleData.locationId || 'lb',
+    language: articleData.language || 'en',
+    date: articleData.date || dateStr,
+    time: articleData.time || timeStr,
+    views: articleData.views !== undefined ? String(articleData.views) : '0',
+    shares: articleData.shares !== undefined ? String(articleData.shares) : '0',
+    createdAt: now,
+    updatedAt: now
+  };
 
-    articles.push(newArticle);
-    await saveAll(articles);
-    return newArticle;
-  });
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const sql = `
+        INSERT INTO articles (
+          id, title, permalink, slug, redirects, previous_permalinks, content, summary,
+          author, category, image, image_url, status, location_id, language, date, time,
+          views, shares, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+        ) RETURNING *;
+      `;
+      const res = await pool.query(sql, [
+        newArticle.id,
+        newArticle.title,
+        newArticle.permalink,
+        newArticle.slug,
+        JSON.stringify(newArticle.redirects),
+        JSON.stringify(newArticle.previousPermalinks),
+        newArticle.content,
+        newArticle.summary,
+        newArticle.author,
+        newArticle.category,
+        newArticle.image,
+        newArticle.imageUrl,
+        newArticle.status,
+        newArticle.locationId,
+        newArticle.language,
+        newArticle.date,
+        newArticle.time,
+        newArticle.views,
+        newArticle.shares,
+        now,
+        now
+      ]);
+
+      for (const oldP of cleanRedirects) {
+        await pool.query(
+          `INSERT INTO article_redirects (article_id, old_permalink, target_permalink)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (old_permalink) DO UPDATE SET target_permalink = EXCLUDED.target_permalink;`,
+          [id, oldP, permalinkVal]
+        );
+      }
+
+      if (res && res.rows && res.rows[0]) {
+        return formatArticleRecord(res.rows[0]);
+      }
+    } catch (err) {
+      console.error('Database createArticle error, using fallback:', err.message);
+    }
+  }
+
+  memoryArticles.push(newArticle);
+  return formatArticleRecord(newArticle);
 }
 
-/**
- * Updates an existing article in the store.
- * If permalink or title/slug changes, automatically records old permalink into redirects for SEO auto-redirection.
- * @param {string} id Unique article ID or permalink.
- * @param {Object} updateData Fields to update.
- * @returns {Promise<Object|null>} The updated article, or null if not found.
- */
 async function updateArticle(id, updateData) {
-  return enqueue(async () => {
-    const articles = await getAll();
-    const lowerId = id ? id.toLowerCase() : '';
-    const index = articles.findIndex(a =>
-      a.id === id ||
-      (a.permalink || '').toLowerCase() === lowerId ||
-      (a.slug || '').toLowerCase() === lowerId ||
-      (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lowerId)) ||
-      (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lowerId))
-    );
-    if (index === -1) {
-      return null;
+  const existing = await getArticleById(id);
+  if (!existing) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+
+  let permalinkVal;
+  if (typeof updateData.permalink === 'string' && updateData.permalink.trim() !== '') {
+    permalinkVal = generatePermalink(updateData.permalink);
+  } else if (typeof updateData.slug === 'string' && updateData.slug.trim() !== '') {
+    permalinkVal = generatePermalink(updateData.slug);
+  } else if (typeof updateData.title === 'string' && updateData.title.trim() !== '') {
+    permalinkVal = generatePermalink(updateData.title);
+  } else {
+    permalinkVal = existing.permalink || existing.slug || generatePermalink(existing.title || '');
+  }
+
+  const existingRedirects = Array.isArray(existing.redirects)
+    ? existing.redirects
+    : (Array.isArray(existing.previousPermalinks) ? existing.previousPermalinks : []);
+
+  let updatedRedirects = [...existingRedirects];
+
+  if (Array.isArray(updateData.redirects)) {
+    updatedRedirects.push(...updateData.redirects);
+  }
+  if (Array.isArray(updateData.previousPermalinks)) {
+    updatedRedirects.push(...updateData.previousPermalinks);
+  }
+
+  const oldPermalink = existing.permalink || existing.slug;
+  if (oldPermalink && oldPermalink !== permalinkVal) {
+    if (!updatedRedirects.includes(oldPermalink)) {
+      updatedRedirects.push(oldPermalink);
     }
-
-    const existing = articles[index];
-    const now = new Date().toISOString();
-
-    let permalinkVal;
-    if (typeof updateData.permalink === 'string' && updateData.permalink.trim() !== '') {
-      permalinkVal = generatePermalink(updateData.permalink);
-    } else if (typeof updateData.slug === 'string' && updateData.slug.trim() !== '') {
-      permalinkVal = generatePermalink(updateData.slug);
-    } else if (typeof updateData.title === 'string' && updateData.title.trim() !== '') {
-      permalinkVal = generatePermalink(updateData.title);
-    } else {
-      permalinkVal = existing.permalink || existing.slug || generatePermalink(existing.title || '');
+    if (existing.slug && existing.slug !== permalinkVal && !updatedRedirects.includes(existing.slug)) {
+      updatedRedirects.push(existing.slug);
     }
+  }
 
-    const existingRedirects = Array.isArray(existing.redirects)
-      ? existing.redirects
-      : (Array.isArray(existing.previousPermalinks) ? existing.previousPermalinks : []);
+  updatedRedirects = Array.from(new Set(updatedRedirects)).filter(r => r && r !== permalinkVal);
 
-    let updatedRedirects = [...existingRedirects];
+  const imageVal = typeof updateData.imageUrl === 'string'
+    ? updateData.imageUrl
+    : (typeof updateData.image === 'string' ? updateData.image : (existing.imageUrl || existing.image || ''));
 
-    if (Array.isArray(updateData.redirects)) {
-      updatedRedirects.push(...updateData.redirects);
-    }
-    if (Array.isArray(updateData.previousPermalinks)) {
-      updatedRedirects.push(...updateData.previousPermalinks);
-    }
+  const updatedArticle = {
+    ...existing,
+    title: typeof updateData.title === 'string' ? updateData.title : existing.title,
+    permalink: permalinkVal,
+    slug: permalinkVal,
+    redirects: updatedRedirects,
+    previousPermalinks: updatedRedirects,
+    content: typeof updateData.content === 'string' ? updateData.content : existing.content,
+    summary: typeof updateData.summary === 'string' ? updateData.summary : existing.summary,
+    author: typeof updateData.author === 'string' ? updateData.author : existing.author,
+    category: typeof updateData.category === 'string' ? updateData.category : (existing.category || ''),
+    image: imageVal,
+    imageUrl: imageVal,
+    status: typeof updateData.status === 'string' ? updateData.status : existing.status,
+    locationId: typeof updateData.locationId === 'string' ? updateData.locationId : (existing.locationId || 'lb'),
+    language: typeof updateData.language === 'string' ? updateData.language : (existing.language || 'en'),
+    date: typeof updateData.date === 'string' ? updateData.date : existing.date,
+    time: typeof updateData.time === 'string' ? updateData.time : existing.time,
+    views: updateData.views !== undefined ? String(updateData.views) : (existing.views || '0'),
+    shares: updateData.shares !== undefined ? String(updateData.shares) : (existing.shares || '0'),
+    updatedAt: now
+  };
 
-    const oldPermalink = existing.permalink || existing.slug;
-    if (oldPermalink && oldPermalink !== permalinkVal) {
-      if (!updatedRedirects.includes(oldPermalink)) {
-        updatedRedirects.push(oldPermalink);
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const sql = `
+        UPDATE articles
+        SET title = $1, permalink = $2, slug = $3, redirects = $4, previous_permalinks = $5,
+            content = $6, summary = $7, author = $8, category = $9, image = $10, image_url = $11,
+            status = $12, location_id = $13, language = $14, date = $15, time = $16,
+            views = $17, shares = $18, updated_at = $19
+        WHERE id = $20
+        RETURNING *;
+      `;
+      const res = await pool.query(sql, [
+        updatedArticle.title,
+        updatedArticle.permalink,
+        updatedArticle.slug,
+        JSON.stringify(updatedArticle.redirects),
+        JSON.stringify(updatedArticle.previousPermalinks),
+        updatedArticle.content,
+        updatedArticle.summary,
+        updatedArticle.author,
+        updatedArticle.category,
+        updatedArticle.image,
+        updatedArticle.imageUrl,
+        updatedArticle.status,
+        updatedArticle.locationId,
+        updatedArticle.language,
+        updatedArticle.date,
+        updatedArticle.time,
+        updatedArticle.views,
+        updatedArticle.shares,
+        now,
+        existing.id
+      ]);
+
+      for (const r of updatedRedirects) {
+        if (r && r !== permalinkVal) {
+          await pool.query(
+            `INSERT INTO article_redirects (article_id, old_permalink, target_permalink)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (old_permalink) DO UPDATE SET target_permalink = EXCLUDED.target_permalink;`,
+            [existing.id, r, permalinkVal]
+          );
+        }
       }
-      if (existing.slug && existing.slug !== permalinkVal && !updatedRedirects.includes(existing.slug)) {
-        updatedRedirects.push(existing.slug);
+
+      if (oldPermalink && oldPermalink !== permalinkVal) {
+        await pool.query(
+          `UPDATE article_redirects
+           SET target_permalink = $1
+           WHERE article_id = $2;`,
+          [permalinkVal, existing.id]
+        );
       }
+
+      if (res && res.rows && res.rows[0]) {
+        return formatArticleRecord(res.rows[0]);
+      }
+    } catch (err) {
+      console.error('Database updateArticle error, using fallback:', err.message);
     }
+  }
 
-    // Filter out current permalinkVal to avoid infinite loop
-    updatedRedirects = Array.from(new Set(updatedRedirects)).filter(r => r && r !== permalinkVal);
-
-    const imageVal = typeof updateData.imageUrl === 'string'
-      ? updateData.imageUrl
-      : (typeof updateData.image === 'string' ? updateData.image : (existing.imageUrl || existing.image || ''));
-
-    const updated = {
-      ...existing,
-      title: typeof updateData.title === 'string' ? updateData.title : existing.title,
-      permalink: permalinkVal,
-      slug: permalinkVal,
-      redirects: updatedRedirects,
-      previousPermalinks: updatedRedirects,
-      content: typeof updateData.content === 'string' ? updateData.content : existing.content,
-      summary: typeof updateData.summary === 'string' ? updateData.summary : existing.summary,
-      author: typeof updateData.author === 'string' ? updateData.author : existing.author,
-      category: typeof updateData.category === 'string' ? updateData.category : (existing.category || ''),
-      image: imageVal,
-      imageUrl: imageVal,
-      status: typeof updateData.status === 'string' ? updateData.status : existing.status,
-      locationId: typeof updateData.locationId === 'string' ? updateData.locationId : (existing.locationId || 'lb'),
-      language: typeof updateData.language === 'string' ? updateData.language : (existing.language || 'en'),
-      date: typeof updateData.date === 'string' ? updateData.date : existing.date,
-      time: typeof updateData.time === 'string' ? updateData.time : existing.time,
-      views: updateData.views !== undefined ? String(updateData.views) : (existing.views || '0'),
-      shares: updateData.shares !== undefined ? String(updateData.shares) : (existing.shares || '0'),
-      updatedAt: now
-    };
-
-    articles[index] = updated;
-    await saveAll(articles);
-    return updated;
-  });
+  const index = memoryArticles.findIndex(a =>
+    a.id === existing.id ||
+    (a.permalink || '').toLowerCase() === existing.id.toLowerCase() ||
+    (a.slug || '').toLowerCase() === existing.id.toLowerCase()
+  );
+  if (index !== -1) {
+    memoryArticles[index] = updatedArticle;
+    return formatArticleRecord(updatedArticle);
+  }
+  return null;
 }
 
-/**
- * Deletes an article from the store.
- * @param {string} id Unique article ID or permalink.
- * @returns {Promise<boolean>} True if found and deleted, false otherwise.
- */
 async function deleteArticle(id) {
-  return enqueue(async () => {
-    const articles = await getAll();
-    const lowerId = id ? id.toLowerCase() : '';
-    const index = articles.findIndex(a =>
-      a.id === id ||
-      (a.permalink || '').toLowerCase() === lowerId ||
-      (a.slug || '').toLowerCase() === lowerId ||
-      (Array.isArray(a.redirects) && a.redirects.some(r => r.toLowerCase() === lowerId)) ||
-      (Array.isArray(a.previousPermalinks) && a.previousPermalinks.some(r => r.toLowerCase() === lowerId))
-    );
-    if (index === -1) {
-      return false;
-    }
+  const existing = await getArticleById(id);
+  if (!existing) {
+    return false;
+  }
 
-    articles.splice(index, 1);
-    await saveAll(articles);
-    return true;
-  });
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      const res = await pool.query('DELETE FROM articles WHERE id = $1 RETURNING id;', [existing.id]);
+      if (res && res.rows && res.rows.length > 0) {
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Database deleteArticle error, using fallback:', err.message);
+    }
+  }
+
+  const index = memoryArticles.findIndex(a => a.id === existing.id);
+  if (index === -1) {
+    return false;
+  }
+  memoryArticles.splice(index, 1);
+  return true;
 }
 
-/**
- * Formats an article into a preview card structure for public web feed displays.
- * @param {Object} article 
- * @returns {Object} Preview card object
- */
 function formatPreviewCard(article) {
   if (!article) return null;
   const img = article.imageUrl || article.image || '';
@@ -464,13 +657,18 @@ function formatPreviewCard(article) {
   };
 }
 
-/**
- * Resets the store with an empty array.
- */
 async function clearStore() {
-  return enqueue(async () => {
-    await saveAll([]);
-  });
+  const pool = db.getPool();
+  if (pool) {
+    try {
+      await pool.query('TRUNCATE TABLE articles CASCADE;');
+      await pool.query('TRUNCATE TABLE article_redirects;');
+    } catch (err) {
+      console.error('Database clearStore error, using fallback:', err.message);
+    }
+  }
+
+  memoryArticles = [];
 }
 
 module.exports = {
