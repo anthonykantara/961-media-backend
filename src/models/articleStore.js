@@ -282,6 +282,8 @@ async function createArticle(articleData) {
 
     const cleanRedirects = Array.from(new Set(initialRedirects)).filter(r => r && r !== permalinkVal);
 
+    const publishAtVal = articleData.publish_at || articleData.publishAt || articleData.scheduledAt || null;
+
     const newArticle = {
       id: articleData.id || crypto.randomUUID(),
       title: articleData.title,
@@ -296,6 +298,9 @@ async function createArticle(articleData) {
       image: imageVal,
       imageUrl: imageVal,
       status: articleData.status || 'draft',
+      publish_at: publishAtVal,
+      publishAt: publishAtVal,
+      options: articleData.options || articleData.dispatchOptions || {},
       locationId: articleData.locationId || 'lb',
       language: articleData.language || 'en',
       date: articleData.date || dateStr,
@@ -378,6 +383,10 @@ async function updateArticle(id, updateData) {
       ? updateData.imageUrl
       : (typeof updateData.image === 'string' ? updateData.image : (existing.imageUrl || existing.image || ''));
 
+    const publishAtUpdated = updateData.publish_at !== undefined ? updateData.publish_at :
+      (updateData.publishAt !== undefined ? updateData.publishAt :
+      (updateData.scheduledAt !== undefined ? updateData.scheduledAt : (existing.publish_at || existing.publishAt || existing.scheduledAt || null)));
+
     const updated = {
       ...existing,
       title: typeof updateData.title === 'string' ? updateData.title : existing.title,
@@ -392,6 +401,9 @@ async function updateArticle(id, updateData) {
       image: imageVal,
       imageUrl: imageVal,
       status: typeof updateData.status === 'string' ? updateData.status : existing.status,
+      publish_at: publishAtUpdated,
+      publishAt: publishAtUpdated,
+      options: updateData.options || updateData.dispatchOptions || existing.options || existing.dispatchOptions || {},
       locationId: typeof updateData.locationId === 'string' ? updateData.locationId : (existing.locationId || 'lb'),
       language: typeof updateData.language === 'string' ? updateData.language : (existing.language || 'en'),
       date: typeof updateData.date === 'string' ? updateData.date : existing.date,
@@ -473,6 +485,23 @@ async function clearStore() {
   });
 }
 
+/**
+ * Fetches all scheduled articles whose release time (publish_at / publishAt / scheduledAt) is due (<= now).
+ * @returns {Promise<Array<Object>>} List of due scheduled articles.
+ */
+async function getScheduledArticlesDueToPublish() {
+  const articles = await getAll();
+  const nowTs = Date.now();
+  return articles.filter(a => {
+    if (!a || !a.status) return false;
+    if (a.status.toLowerCase() !== 'scheduled') return false;
+    const releaseTime = a.publish_at || a.publishAt || a.scheduledAt;
+    if (!releaseTime) return false;
+    const releaseTs = new Date(releaseTime).getTime();
+    return !isNaN(releaseTs) && releaseTs <= nowTs;
+  });
+}
+
 module.exports = {
   ensureInitialized,
   getAllArticles,
@@ -484,5 +513,6 @@ module.exports = {
   updateArticle,
   deleteArticle,
   formatPreviewCard,
-  clearStore
+  clearStore,
+  getScheduledArticlesDueToPublish
 };
