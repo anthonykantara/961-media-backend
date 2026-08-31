@@ -207,12 +207,12 @@ async function getArticleById(id) {
         WHERE id = $1
            OR LOWER(permalink) = $2
            OR LOWER(slug) = $2
-           OR redirects @> jsonb_build_array($3)
-           OR previous_permalinks @> jsonb_build_array($3)
+           OR redirects @> jsonb_build_array($2::text)
+           OR previous_permalinks @> jsonb_build_array($2::text)
            OR id IN (SELECT article_id FROM article_redirects WHERE LOWER(old_permalink) = $2)
         LIMIT 1;
       `;
-      const res = await pool.query(sql, [id, lower, id]);
+      const res = await pool.query(sql, [id, lower]);
       if (res && res.rows && res.rows[0]) {
         return formatArticleRecord(res.rows[0]);
       }
@@ -258,12 +258,12 @@ async function findArticleWithRedirect(id) {
       // 2. Redirect match
       const redirectSql = `
         SELECT * FROM articles
-        WHERE redirects @> jsonb_build_array($1)
-           OR previous_permalinks @> jsonb_build_array($1)
-           OR id IN (SELECT article_id FROM article_redirects WHERE LOWER(old_permalink) = $2)
+        WHERE redirects @> jsonb_build_array($1::text)
+           OR previous_permalinks @> jsonb_build_array($1::text)
+           OR id IN (SELECT article_id FROM article_redirects WHERE LOWER(old_permalink) = $1)
         LIMIT 1;
       `;
-      const redirectRes = await pool.query(redirectSql, [id, lower]);
+      const redirectRes = await pool.query(redirectSql, [lower]);
       if (redirectRes && redirectRes.rows && redirectRes.rows[0]) {
         const art = formatArticleRecord(redirectRes.rows[0]);
         return {
@@ -564,13 +564,18 @@ async function updateArticle(id, updateData) {
         existing.id
       ]);
 
+      for (const r of updatedRedirects) {
+        if (r && r !== permalinkVal) {
+          await pool.query(
+            `INSERT INTO article_redirects (article_id, old_permalink, target_permalink)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (old_permalink) DO UPDATE SET target_permalink = EXCLUDED.target_permalink;`,
+            [existing.id, r, permalinkVal]
+          );
+        }
+      }
+
       if (oldPermalink && oldPermalink !== permalinkVal) {
-        await pool.query(
-          `INSERT INTO article_redirects (article_id, old_permalink, target_permalink)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (old_permalink) DO UPDATE SET target_permalink = EXCLUDED.target_permalink;`,
-          [existing.id, oldPermalink, permalinkVal]
-        );
         await pool.query(
           `UPDATE article_redirects
            SET target_permalink = $1
