@@ -59,6 +59,18 @@ describe('JWT Authorization & RBAC Guards', () => {
       expect(res.status).toBe(401);
     });
 
+    it('should reject unauthenticated POST /api/languages', async () => {
+      const res = await request(app)
+        .post('/api/languages')
+        .send({ code: 'de', name: 'German' });
+      expect(res.status).toBe(401);
+    });
+
+    it('should reject unauthenticated GET /api/v1/admin/leads-and-campaigns', async () => {
+      const res = await request(app).get('/api/v1/admin/leads-and-campaigns');
+      expect(res.status).toBe(401);
+    });
+
     it('should allow public GET requests without authentication token', async () => {
       const artRes = await request(app).get('/api/articles');
       expect(artRes.status).toBe(200);
@@ -217,6 +229,25 @@ describe('JWT Authorization & RBAC Guards', () => {
 
       expect(updateRes.status).toBe(200);
       expect(updateRes.body.name).toBe('Downtown Beirut');
+    });
+
+    it('should allow Editor to manage language registry', async () => {
+      const createRes = await request(app)
+        .post('/api/languages')
+        .set(editorHeaders)
+        .send({ code: 'de', name: 'German', dir: 'ltr', enabled: true });
+
+      expect(createRes.status).toBe(201);
+      expect(createRes.body.code).toBe('de');
+    });
+
+    it('should reject Editor trying to access ads admin leads (403 Forbidden)', async () => {
+      const res = await request(app)
+        .get('/api/v1/admin/leads-and-campaigns')
+        .set(editorHeaders);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Forbidden');
     });
 
     it('should reject Editor trying to invoke pipeline dispatches (403 Forbidden)', async () => {

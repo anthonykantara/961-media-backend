@@ -47,7 +47,8 @@ function authenticateJwt(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const secret = process.env.JWT_SECRET || 'secret';
+    const decoded = jwt.verify(token, secret);
     const userId = decoded.id || decoded.userId || decoded.sub || 'unknown';
     const userRole = decoded.role || 'Contributor';
 
@@ -116,8 +117,9 @@ function requireRole(allowedRolesOrMinTier) {
  * to Editor or Admin roles.
  */
 function checkArticlePublishingRole(req, res, next) {
-  if (req.body && typeof req.body.status === 'string' && req.body.status.toLowerCase() === 'published') {
-    const userTier = getRoleTier(req.user ? req.user.role : '');
+  if (req.body && typeof req.body.status === 'string' && req.body.status.trim().toLowerCase() === 'published') {
+    const userRole = req.user ? req.user.role : '';
+    const userTier = getRoleTier(userRole);
     if (userTier < ROLE_TIERS.editor) {
       return res.status(403).json({
         error: 'Forbidden',
@@ -134,12 +136,14 @@ function checkArticlePublishingRole(req, res, next) {
  */
 function auditLogger(req, res, next) {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-    const userId = req.user ? req.user.id : 'unauthenticated';
-    const userRole = req.user ? req.user.role : 'unknown';
-
     const originalSend = res.send;
     res.send = function (...args) {
-      console.log(`[MUTATION AUDIT] User ID: ${userId} | Role: ${userRole} | Action: ${req.method} ${req.originalUrl || req.url} | Status: ${res.statusCode}`);
+      if (!res._auditLogged) {
+        res._auditLogged = true;
+        const userId = req.user ? (req.user.id || req.user.userId || req.user.sub || 'unknown') : 'unauthenticated';
+        const userRole = req.user ? req.user.role : 'unknown';
+        console.log(`[MUTATION AUDIT] User ID: ${userId} | Role: ${userRole} | Action: ${req.method} ${req.originalUrl || req.url} | Status: ${res.statusCode}`);
+      }
       return originalSend.apply(res, args);
     };
   }

@@ -4,6 +4,7 @@ const adsStore = require('../models/adsStore');
 const { uploadToWasabi } = require('../services/wasabiService');
 const { migrateAdAssetsToPermanent, cleanTemporaryAdAssets } = require('../workers/wasabiAdCleanup');
 const { createAdsSlackChannel } = require('../services/slackAdService');
+const { authenticateJwt, requireRole, auditLogger } = require('../middleware/auth');
 
 /**
  * GET /api/v1/ad-catalog
@@ -209,7 +210,7 @@ router.post('/campaigns/workspace/:token/messages', async (req, res, next) => {
  * GET /api/v1/admin/leads-and-campaigns
  * Admin view sorting opportunities by budget priority and state with filtering support
  */
-router.get('/admin/leads-and-campaigns', async (req, res, next) => {
+router.get('/admin/leads-and-campaigns', authenticateJwt, requireRole('Admin'), async (req, res, next) => {
   try {
     const filters = {
       status: req.query.status,
@@ -231,7 +232,7 @@ router.get('/admin/leads-and-campaigns', async (req, res, next) => {
  * POST /api/v1/admin/campaigns/:id/slack-channel
  * Trigger Slack channel creation (#ads-{company_slug})
  */
-router.post('/admin/campaigns/:id/slack-channel', async (req, res, next) => {
+router.post('/admin/campaigns/:id/slack-channel', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const campaignId = req.params.id;
     const workspace = await adsStore.getCampaignByToken(campaignId);
@@ -269,7 +270,7 @@ router.post('/admin/campaigns/:id/slack-channel', async (req, res, next) => {
  * POST /api/v1/admin/cleanup-temp-assets
  * Manually trigger Wasabi temporary creative asset cleanup
  */
-router.post('/admin/cleanup-temp-assets', async (req, res, next) => {
+router.post('/admin/cleanup-temp-assets', authenticateJwt, auditLogger, requireRole('Admin'), async (req, res, next) => {
   try {
     const maxAgeHours = req.body && req.body.maxAgeHours ? parseFloat(req.body.maxAgeHours) : 24;
     const result = await cleanTemporaryAdAssets(maxAgeHours);

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const languageStore = require('../models/languageStore');
 const LanguageContext = require('../utils/languageContext');
+const { authenticateJwt, requireRole, auditLogger } = require('../middleware/auth');
 
 /**
  * Validation helper for language data
@@ -99,7 +100,7 @@ router.get('/:code', async (req, res, next) => {
  * POST /api/languages
  * Creates/Registers a new language.
  */
-router.post('/', async (req, res, next) => {
+router.post('/', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const errors = validateLanguageData(req.body, false);
     if (errors.length > 0) {
@@ -120,7 +121,7 @@ router.post('/', async (req, res, next) => {
  * PUT /api/languages/:code
  * Updates an existing language.
  */
-router.put('/:code', async (req, res, next) => {
+router.put('/:code', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { code } = req.params;
     const existing = await languageStore.getLanguageByCode(code);
@@ -144,7 +145,7 @@ router.put('/:code', async (req, res, next) => {
  * PATCH /api/languages/:code
  * Partial update for a language.
  */
-router.patch('/:code', async (req, res, next) => {
+router.patch('/:code', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { code } = req.params;
     const existing = await languageStore.getLanguageByCode(code);
@@ -168,7 +169,7 @@ router.patch('/:code', async (req, res, next) => {
  * DELETE /api/languages/:code
  * Deletes a language.
  */
-router.delete('/:code', async (req, res, next) => {
+router.delete('/:code', authenticateJwt, auditLogger, requireRole('Editor'), async (req, res, next) => {
   try {
     const { code } = req.params;
     const deleted = await languageStore.deleteLanguage(code);
