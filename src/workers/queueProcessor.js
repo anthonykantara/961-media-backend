@@ -20,12 +20,19 @@ async function checkScheduledArticles() {
     for (const article of dueArticles) {
       await articleStore.updateArticle(article.id, { status: 'published' });
 
-      const taskOptions = article.options || article.dispatchOptions || {};
-      const task = await queueStore.enqueueTask({
-        articleId: article.id,
-        options: taskOptions
-      });
-      enqueuedTasks.push(task);
+      const existingTasks = await queueStore.getTasksByArticleId(article.id);
+      const hasActiveTask = existingTasks.some(t =>
+        t.status === 'pending' || t.status === 'processing' || t.status === 'retry_scheduled'
+      );
+
+      if (!hasActiveTask) {
+        const taskOptions = article.options || article.dispatchOptions || {};
+        const task = await queueStore.enqueueTask({
+          articleId: article.id,
+          options: taskOptions
+        });
+        enqueuedTasks.push(task);
+      }
     }
     return enqueuedTasks;
   } catch (err) {

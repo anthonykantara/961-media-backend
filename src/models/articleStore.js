@@ -497,7 +497,13 @@ async function getScheduledArticlesDueToPublish() {
     if (a.status.toLowerCase() !== 'scheduled') return false;
     const releaseTime = a.publish_at || a.publishAt || a.scheduledAt;
     if (!releaseTime) return false;
-    const releaseTs = new Date(releaseTime).getTime();
+    let releaseTs = typeof releaseTime === 'number' ? releaseTime : new Date(releaseTime).getTime();
+    if (typeof releaseTime === 'number' && releaseTime < 1e11) {
+      releaseTs = releaseTime * 1000;
+    } else if (typeof releaseTime === 'string' && /^\d+$/.test(releaseTime)) {
+      const num = Number(releaseTime);
+      releaseTs = num < 1e11 ? num * 1000 : num;
+    }
     return !isNaN(releaseTs) && releaseTs <= nowTs;
   });
 }

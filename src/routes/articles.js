@@ -30,7 +30,7 @@ function validateArticleData(data, isUpdate = false) {
   }
 
   // Optional string validation if provided
-  const optionalFields = ['summary', 'author', 'category', 'image', 'imageUrl', 'status', 'locationId', 'language', 'date', 'time', 'permalink', 'slug'];
+  const optionalFields = ['summary', 'author', 'category', 'image', 'imageUrl', 'status', 'locationId', 'language', 'date', 'time', 'permalink', 'slug', 'publish_at', 'publishAt', 'scheduledAt'];
   optionalFields.forEach(field => {
     if (data.hasOwnProperty(field) && data[field] !== null && data[field] !== undefined) {
       if (typeof data[field] !== 'string') {

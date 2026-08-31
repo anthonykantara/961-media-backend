@@ -154,6 +154,36 @@ describe('Automated Article Scheduler & Stale Lock Recovery Pipeline', () => {
       const fetchedArticle = await articleStore.getArticleById(futureArticle.id);
       expect(fetchedArticle.status).toBe('scheduled');
     });
+
+    it('should correctly parse numeric epoch timestamps in seconds and milliseconds for scheduled articles', async () => {
+      const pastSeconds = Math.floor((Date.now() - 10000) / 1000); // 10s ago in seconds
+      const scheduledSecArticle = await articleStore.createArticle({
+        title: 'Epoch Seconds Scheduled Article',
+        content: 'Testing epoch seconds timestamp.',
+        status: 'scheduled',
+        publish_at: pastSeconds
+      });
+
+      const enqueued = await checkScheduledArticles();
+      expect(enqueued.length).toBe(1);
+      expect(enqueued[0].article_id).toBe(scheduledSecArticle.id);
+    });
+
+    it('should not enqueue duplicate tasks if an active task already exists for a scheduled article', async () => {
+      const pastPublishTime = new Date(Date.now() - 5000).toISOString();
+      const scheduledArticle = await articleStore.createArticle({
+        title: 'Prevent Duplicate Task Article',
+        content: 'Testing duplicate prevention.',
+        status: 'scheduled',
+        publish_at: pastPublishTime
+      });
+
+      // Manually enqueue a task for this article first
+      await queueStore.enqueueTask({ articleId: scheduledArticle.id });
+
+      const enqueuedTasks = await checkScheduledArticles();
+      expect(enqueuedTasks.length).toBe(0);
+    });
   });
 
   describe('3. Stale Lock Recovery', () => {
@@ -185,6 +215,27 @@ describe('Automated Article Scheduler & Stale Lock Recovery Pipeline', () => {
 
       currentTask = await queueStore.getTaskById(task.id);
       expect(currentTask.status).toBe('pending');
+    });
+
+    it('should mark task as failed if stale lock recovery triggers after max_attempts reached', async () => {
+      const article = await articleStore.createArticle({
+        title: 'Max Attempts Stale Task',
+        content: 'Testing max attempts lock expiration.'
+      });
+
+      const task = await queueStore.enqueueTask({
+        articleId: article.id,
+        maxAttempts: 1
+      });
+
+      // Claim task (attempts becomes 1 = maxAttempts)
+      await queueStore.claimPendingTasks(10);
+
+      // Force stale lock recovery
+      const recovered = await queueStore.recoverStaleLocks(0);
+      expect(recovered.length).toBe(1);
+      expect(recovered[0].status).toBe('failed');
+      expect(recovered[0].last_error).toContain('Stale lock expired');
     });
 
     it('should allow reset tasks to be re-claimed and successfully re-processed', async () => {

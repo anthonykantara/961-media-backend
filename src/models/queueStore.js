@@ -53,9 +53,15 @@ async function enqueueTask({
 
   let runAtDate = now;
   if (targetTime) {
-    const parsed = new Date(targetTime);
-    if (!isNaN(parsed.getTime())) {
-      runAtDate = parsed;
+    let parsedTs = typeof targetTime === 'number' ? targetTime : new Date(targetTime).getTime();
+    if (typeof targetTime === 'number' && targetTime < 1e11) {
+      parsedTs = targetTime * 1000;
+    } else if (typeof targetTime === 'string' && /^\d+$/.test(targetTime)) {
+      const num = Number(targetTime);
+      parsedTs = num < 1e11 ? num * 1000 : num;
+    }
+    if (!isNaN(parsedTs)) {
+      runAtDate = new Date(parsedTs);
     }
   }
 
@@ -360,19 +366,33 @@ async function recoverStaleLocks(staleThresholdMs = 10 * 60 * 1000) {
 
   if (pool) {
     try {
+      const failSql = `
+        UPDATE dispatch_queue
+        SET status = 'failed',
+            last_error = 'Stale lock expired after reaching maximum attempts',
+            updated_at = $1
+        WHERE status = 'processing'
+          AND COALESCE(updated_at, created_at) <= $2
+          AND attempts >= max_attempts
+        RETURNING *;
+      `;
+      const failRes = await pool.query(failSql, [now, cutoff]);
+
       const sql = `
         UPDATE dispatch_queue
         SET status = 'pending',
             updated_at = $1
         WHERE status = 'processing'
-          AND updated_at <= $2
+          AND COALESCE(updated_at, created_at) <= $2
+          AND attempts < max_attempts
         RETURNING *;
       `;
       const res = await pool.query(sql, [now, cutoff]);
-      if (res && res.rows) {
-        return res.rows.map(normalizeTaskRecord);
-      }
-      return [];
+      const recoveredRows = [
+        ...(failRes && failRes.rows ? failRes.rows : []),
+        ...(res && res.rows ? res.rows : [])
+      ];
+      return recoveredRows.map(normalizeTaskRecord);
     } catch (err) {
       console.error('Database recoverStaleLocks error, using fallback:', err.message);
     }
@@ -386,7 +406,12 @@ async function recoverStaleLocks(staleThresholdMs = 10 * 60 * 1000) {
     if (task.status === 'processing') {
       const updatedAtTs = new Date(task.updated_at || task.created_at).getTime();
       if (updatedAtTs <= cutoffTs) {
-        task.status = 'pending';
+        if (task.attempts >= task.max_attempts) {
+          task.status = 'failed';
+          task.last_error = 'Stale lock expired after reaching maximum attempts';
+        } else {
+          task.status = 'pending';
+        }
         task.updated_at = now.toISOString();
         recovered.push(normalizeTaskRecord(task));
       }
