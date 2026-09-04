@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS advertisers (
     brand_name VARCHAR(255) NOT NULL,
     website VARCHAR(255),
     industry VARCHAR(100),
+    account_type VARCHAR(100),
     country_id VARCHAR(50) REFERENCES countries(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

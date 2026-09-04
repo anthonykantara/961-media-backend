@@ -515,7 +515,7 @@ async function getAdCatalog(countryCodeOrId = 'lb') {
 
 function extractLeadAdvertiserInfo(leadData) {
   const adv = leadData.advertiser || {};
-  const brandName = (adv.brandName || adv.brand || leadData.brand || adv.companyName || leadData.companyName || 'Unnamed Advertiser').trim();
+  const brandName = (adv.brandName || adv.brand || leadData.brandName || leadData.brand || adv.companyName || leadData.companyName || 'Unnamed Advertiser').trim();
   const companyName = (adv.companyName || leadData.companyName || brandName).trim();
   const companySlug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'company';
   const fullName = (adv.contactName || adv.fullName || leadData.fullName || leadData.contactName || '').trim();
@@ -604,9 +604,9 @@ async function createOrUpdateAdvertiser(leadData) {
         const advId = `adv_${crypto.randomBytes(6).toString('hex')}`;
         const now = new Date();
         const insRes = await pool.query(
-          `INSERT INTO advertisers (id, company_name, company_slug, brand_name, website, industry, country_id, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-          [advId, info.companyName, info.companySlug, info.brandName, info.website, info.industry, info.countryId, now]
+          `INSERT INTO advertisers (id, company_name, company_slug, brand_name, website, industry, account_type, country_id, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [advId, info.companyName, info.companySlug, info.brandName, info.website, info.industry, info.accountType, info.countryId, now]
         );
         advertiser = normalizeAdvertiser(insRes.rows[0]);
       }
@@ -758,13 +758,15 @@ async function createLeadCampaign(campaignData) {
   const eventDetails = campaignDetails.eventDetails || campaignData.eventDetails || null;
 
   if (eventDetails) {
-    let distanceKm = eventDetails.distanceKm !== undefined && eventDetails.distanceKm !== null ? parseFloat(eventDetails.distanceKm) : null;
-    if ((distanceKm === null || isNaN(distanceKm)) && eventDetails.lat != null && eventDetails.lng != null) {
+    let distanceKm = null;
+    if (eventDetails.lat != null && eventDetails.lng != null && !isNaN(parseFloat(eventDetails.lat)) && !isNaN(parseFloat(eventDetails.lng))) {
       distanceKm = calculateHaversineDistanceKm(parseFloat(eventDetails.lat), parseFloat(eventDetails.lng));
       eventDetails.distanceKm = Math.round(distanceKm * 10) / 10;
+    } else if (eventDetails.distanceKm !== undefined && eventDetails.distanceKm !== null && !isNaN(parseFloat(eventDetails.distanceKm))) {
+      distanceKm = parseFloat(eventDetails.distanceKm);
     }
 
-    if (distanceKm !== null && !isNaN(distanceKm) && distanceKm > 25) {
+    if (distanceKm !== null && distanceKm > 25) {
       distanceSurcharge = 150;
       distanceSurchargeDetails = {
         amount: 150,
@@ -772,7 +774,7 @@ async function createLeadCampaign(campaignData) {
         distanceKm: Math.round(distanceKm * 10) / 10,
         reason: 'Venue location exceeds 25 km from Beirut Downtown'
       };
-    } else if (distanceKm !== null && !isNaN(distanceKm)) {
+    } else if (distanceKm !== null) {
       distanceSurchargeDetails = {
         amount: 0,
         applied: false,
@@ -792,7 +794,7 @@ async function createLeadCampaign(campaignData) {
     eventDetails,
     distanceSurcharge: distanceSurchargeDetails,
     addOns: validatedAddOns,
-    assets: campaignData.assets || []
+    assets: campaignData.assets || (campaignDetails && campaignDetails.assets) || []
   };
 
   const notesContent = JSON.stringify(completeCampaignDetails);
@@ -956,12 +958,24 @@ async function formatWorkspaceSummary(campaign, advertiser, contact, items, asse
 
   const rawAddOns = (campaignDetails && Array.isArray(campaignDetails.addOns)) ? campaignDetails.addOns : [];
 
+  const matchedAddOnKeys = new Set();
   const parentGroupedAddOns = (items || []).map(item => {
     const catP = catalogProducts.find(p => p.id === item.productId);
     const matched = rawAddOns.filter(a => {
-      if (a.parentProductId) return a.parentProductId === item.productId;
-      const catA = catalogAddOns.find(x => x.id === (a.addOnId || a.id));
-      return catA && catA.compatibleProductIds && catA.compatibleProductIds.includes(item.productId);
+      const aKey = a.addOnId || a.id;
+      if (a.parentProductId) {
+        if (a.parentProductId === item.productId) {
+          matchedAddOnKeys.add(aKey);
+          return true;
+        }
+        return false;
+      }
+      const catA = catalogAddOns.find(x => x.id === aKey);
+      if (catA && catA.compatibleProductIds && catA.compatibleProductIds.includes(item.productId)) {
+        matchedAddOnKeys.add(aKey);
+        return true;
+      }
+      return false;
     });
     return {
       parentProductId: item.productId,
@@ -969,6 +983,15 @@ async function formatWorkspaceSummary(campaign, advertiser, contact, items, asse
       addOns: matched
     };
   }).filter(group => group.addOns.length > 0);
+
+  const unmatchedAddOns = rawAddOns.filter(a => !matchedAddOnKeys.has(a.addOnId || a.id));
+  if (unmatchedAddOns.length > 0 && parentGroupedAddOns.length > 0) {
+    parentGroupedAddOns.push({
+      parentProductId: null,
+      parentProductName: 'General Add-ons',
+      addOns: unmatchedAddOns
+    });
+  }
 
   const formattedAddOns = parentGroupedAddOns.length > 0 ? parentGroupedAddOns : rawAddOns;
 
