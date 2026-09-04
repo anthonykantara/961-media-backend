@@ -26,8 +26,25 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
 
     const featuredArticle = res.body.products.find(p => p.slug === 'featured-article');
     expect(featuredArticle).toBeDefined();
-    expect(featuredArticle.price).toEqual(750);
+    expect(featuredArticle.price).toEqual(2000);
     expect(Array.isArray(featuredArticle.inclusions)).toBe(true);
+
+    const inCarousel = res.body.products.find(p => p.id === 'prod_in_carousel_ig');
+    expect(inCarousel).toBeDefined();
+    expect(inCarousel.price).toEqual(500);
+
+    const eventPkg = res.body.products.find(p => p.id === 'prod_event_package');
+    expect(eventPkg).toBeDefined();
+    expect(eventPkg.price).toEqual(1000);
+    expect(eventPkg.maxQuantity).toEqual(1);
+
+    expect(Array.isArray(res.body.addOns)).toBe(true);
+    expect(res.body.addOns.length).toBeGreaterThanOrEqual(7);
+
+    const recapReel = res.body.addOns.find(a => a.id === 'addon_event_recap_reel');
+    expect(recapReel).toBeDefined();
+    expect(recapReel.price).toEqual(750);
+    expect(recapReel.compatibleProductIds).toContain('prod_event_package');
 
     expect(res.body).toHaveProperty('deterministicCrossSells');
     expect(Array.isArray(res.body.deterministicCrossSells)).toBe(true);
@@ -37,7 +54,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
     expect(saRes.statusCode).toEqual(200);
     expect(saRes.body.activeCountry.code).toEqual('SA');
     const saFeaturedArticle = saRes.body.products.find(p => p.slug === 'featured-article');
-    expect(saFeaturedArticle.price).toEqual(1200);
+    expect(saFeaturedArticle.price).toEqual(2000);
   });
 
   it('POST /api/v1/campaigns/lead captures advertiser info and generates draft campaign with token', async () => {
@@ -48,10 +65,10 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       brand: 'Acme Corp',
       objective: 'Brand Awareness',
       countryId: 'lb',
-      totalAmount: 1700,
+      totalAmount: 2500,
       items: [
-        { productId: 'prod_featured_article', unitPrice: 750, quantity: 1, totalPrice: 750 },
-        { productId: 'prod_social_video', unitPrice: 950, quantity: 1, totalPrice: 950 }
+        { productId: 'prod_featured_article', unitPrice: 2000, quantity: 1, totalPrice: 2000 },
+        { productId: 'prod_in_carousel_ig', unitPrice: 500, quantity: 1, totalPrice: 500 }
       ]
     };
 
@@ -64,7 +81,7 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
     expect(res.body).toHaveProperty('accessToken');
     expect(res.body.accessToken).toMatch(/^cmp_tok_/);
     expect(res.body.campaign.status).toEqual('lead_captured');
-    expect(res.body.campaign.totalAmount).toEqual(1700);
+    expect(res.body.campaign.totalAmount).toEqual(2500);
   });
 
   it('POST /api/v1/campaigns/lead auto-calculates totalAmount if omitted from payload', async () => {
@@ -73,8 +90,8 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       email: 'sam@shop.com',
       brand: 'Sam Shop',
       items: [
-        { productId: 'prod_featured_article', unitPrice: 750, quantity: 2 },
-        { productId: 'prod_display_banner', unitPrice: 300, quantity: 1 }
+        { productId: 'prod_featured_article', unitPrice: 2000, quantity: 2 },
+        { productId: 'prod_in_carousel_ig', unitPrice: 500, quantity: 1 }
       ]
     };
 
@@ -83,7 +100,80 @@ describe('Ads Platform REST API, Wasabi Cleanup & Persistence Tests', () => {
       .send(payload);
 
     expect(res.statusCode).toEqual(201);
-    expect(res.body.campaign.totalAmount).toEqual(1800);
+    expect(res.body.campaign.totalAmount).toEqual(4500);
+  });
+
+  it('POST /api/v1/campaigns/lead rejects add-on if compatible parent product is missing from cart', async () => {
+    const payload = {
+      advertiser: {
+        brandName: 'No Parent Brand',
+        contactName: 'Jane Test',
+        email: 'jane@noparent.com'
+      },
+      cart: [{ productId: 'prod_featured_article', quantity: 1 }],
+      addOns: [{ addOnId: 'addon_event_recap_reel', quantity: 1 }]
+    };
+
+    const res = await request(app)
+      .post('/api/v1/campaigns/lead')
+      .send(payload);
+
+    expect(res.statusCode).toEqual(400);
+    expect(res.body.message).toContain('requires a compatible parent product');
+  });
+
+  it('POST /api/v1/campaigns/lead rejects product when quantity exceeds maxQuantity limit', async () => {
+    const payload = {
+      advertiser: {
+        brandName: 'Event Over Limit',
+        contactName: 'Jane Test',
+        email: 'jane@overlimit.com'
+      },
+      cart: [{ productId: 'prod_event_package', quantity: 2 }]
+    };
+
+    const res = await request(app)
+      .post('/api/v1/campaigns/lead')
+      .send(payload);
+
+    expect(res.statusCode).toEqual(400);
+    expect(res.body.message).toContain('exceeds maximum allowed quantity');
+  });
+
+  it('POST /api/v1/campaigns/lead computes Haversine distance surcharge correctly for venue > 25km', async () => {
+    const payload = {
+      advertiser: {
+        brandName: 'Byblos Event',
+        contactName: 'Byblos Organizer',
+        email: 'organizer@byblos.com'
+      },
+      cart: [{ productId: 'prod_event_package', quantity: 1 }],
+      addOns: [{ addOnId: 'addon_event_recap_reel', quantity: 1 }],
+      campaignDetails: {
+        eventDetails: {
+          title: 'Byblos Harbor Festival',
+          lat: 34.1220,
+          lng: 35.6481,
+          schedule: [{ day: 1, date: '2026-10-01', startTime: '18:00', endTime: '22:00' }]
+        }
+      }
+    };
+
+    const res = await request(app)
+      .post('/api/v1/campaigns/lead')
+      .send(payload);
+
+    expect(res.statusCode).toEqual(201);
+    expect(res.body.campaign.totalAmount).toEqual(1900);
+    expect(res.body.workspaceUrl).toContain('/workspace/');
+
+    const wsRes = await request(app).get(`/api/v1/campaigns/workspace/${res.body.accessToken}`);
+    expect(wsRes.statusCode).toEqual(200);
+    expect(wsRes.body.distanceSurcharge.applied).toBe(true);
+    expect(wsRes.body.distanceSurcharge.amount).toEqual(150);
+    expect(wsRes.body.eventSchedule.length).toEqual(1);
+    expect(wsRes.body.products.length).toEqual(1);
+    expect(wsRes.body.addOns.length).toEqual(1);
   });
 
   it('POST /api/v1/campaigns/upload handles temporary uploads under Wasabi campaigns/temporary/{session_id}/', async () => {

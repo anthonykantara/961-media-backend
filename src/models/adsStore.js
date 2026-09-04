@@ -16,128 +16,144 @@ const DEFAULT_PRODUCTS = [
   {
     id: 'prod_featured_article',
     slug: 'featured-article',
-    name: 'Featured Article & Editorial Story',
-    description: 'In-depth storytelling written by 961 editorial staff and published across web & news feed.',
+    name: 'Featured Article Package',
+    description: 'Custom engaging article in 3 languages, Instagram Carousel, IG post shared to Stories, Facebook post, LinkedIn post, WhatsApp channel update',
     category: 'Editorial',
-    basePrice: 750,
-    unit: 'per article',
+    basePrice: 2000,
+    unit: 'per package',
     inclusions: [
-      'Full editorial article written by 961 staff',
-      'Permanent publication on 961.co',
-      'Social media broadcast on Facebook & X',
-      'Dofollow SEO backlinks'
+      'Custom engaging article in 3 languages',
+      'Instagram Carousel',
+      'IG post shared to Stories',
+      'Facebook post',
+      'LinkedIn post',
+      'WhatsApp channel update'
     ],
-    crossSellIds: ['prod_social_video', 'prod_newsletter_feature'],
+    crossSellIds: ['prod_in_carousel_ig', 'addon_plus_2_articles'],
     crossSellReasons: {
-      prod_social_video: 'Amplify editorial reach by 3x with a dedicated TikTok & Instagram Reel video.',
-      prod_newsletter_feature: 'Get instant day-one exposure by featuring in The961 Morning Brief.'
+      prod_in_carousel_ig: 'Pair your featured article with a dedicated slide placement in our Instagram carousel.',
+      addon_plus_2_articles: 'Scale your campaign reach with 2 additional article packages.'
     }
   },
   {
-    id: 'prod_social_video',
-    slug: 'social-video',
-    name: 'Dedicated Social Video Reel / TikTok',
-    description: 'High-impact short-form video produced or formatted for 961 Instagram Reel & TikTok channels.',
+    id: 'prod_in_carousel_ig',
+    slug: 'in-carousel-ig',
+    name: 'In-Carousel Instagram Placement',
+    description: 'Dedicated slide placement in 961 Instagram carousel post (100k impressions guaranteed)',
     category: 'Social',
-    basePrice: 950,
-    unit: 'per video',
+    basePrice: 500,
+    unit: 'per 100k impressions guaranteed',
     inclusions: [
-      '1080x1920 HD vertical video reel',
-      'Published on 961 Instagram & TikTok',
-      'Interactive story highlight placement',
-      'Targeted audience engagement report'
+      '100k impressions guaranteed',
+      'Dedicated slide placement before final carousel slide',
+      'Published on @961app Instagram page'
     ],
     crossSellIds: ['prod_featured_article', 'addon_express_delivery'],
     crossSellReasons: {
-      prod_featured_article: 'Pair your video with a long-form article for permanent Google SEO ranking.',
-      addon_express_delivery: 'Publish within 24 hours of brief approval with express queue processing.'
+      prod_featured_article: 'Featured Article Package',
+      addon_express_delivery: 'Express Delivery'
     }
   },
   {
-    id: 'prod_display_banner',
-    slug: 'display-banner',
-    name: 'Responsive Display Banner Network',
-    description: 'High-visibility Leaderboard (728x90) and MPU (300x250) banner impressions across key article pages.',
-    category: 'Display',
-    basePrice: 300,
-    unit: 'per 10,000 impressions',
+    id: 'prod_event_package',
+    slug: 'event-package',
+    name: 'Event Coverage Package',
+    description: 'On-site 961 media team coverage for event launches or openings',
+    category: 'Event',
+    basePrice: 1000,
+    unit: 'per event',
+    maxQuantity: 1,
     inclusions: [
-      'Leaderboard & MPU banner ad slots',
-      'Geo-targeted audience delivery',
-      'Real-time CTR and impression analytics',
-      'Desktop & Mobile optimization'
+      '3 IG stories filmed on site of an event (e.g. launch or opening)',
+      'Clear & subtle brand tag included in the first and last story',
+      'On-site 961 media team coverage'
     ],
-    crossSellIds: ['prod_featured_article', 'prod_newsletter_feature'],
+    crossSellIds: ['prod_featured_article', 'prod_in_carousel_ig'],
     crossSellReasons: {
-      prod_featured_article: 'Drive targeted traffic directly from display banners to your featured article.',
-      prod_newsletter_feature: 'Extend banner exposure to high-intent email subscribers.'
-    }
-  },
-  {
-    id: 'prod_newsletter_feature',
-    slug: 'newsletter-feature',
-    name: 'Daily Morning Brief Newsletter Sponsor',
-    description: 'Top header takeover or dedicated sponsored story segment in 961 daily morning newsletter.',
-    category: 'Newsletter',
-    basePrice: 450,
-    unit: 'per edition',
-    inclusions: [
-      'Top header logo takeover & headline blurb',
-      'Direct URL tracking link',
-      'Delivered to 45,000+ active subscribers',
-      '50%+ average open rate'
-    ],
-    crossSellIds: ['prod_featured_article', 'addon_translation'],
-    crossSellReasons: {
-      prod_featured_article: 'Link newsletter readers to a comprehensive editorial feature story.',
-      addon_translation: 'Reach Arabic & French readers with localized newsletter editions.'
-    }
-  },
-  {
-    id: 'prod_dedicated_social_post',
-    slug: 'dedicated-social-post',
-    name: 'Dedicated Social Feed Post',
-    description: 'Single image or carousel post on 961 social media channels with brand tag & link.',
-    category: 'Social',
-    basePrice: 500,
-    unit: 'per post',
-    inclusions: [
-      'Single/Carousel post on Instagram & Facebook',
-      'Tag brand account & link in bio',
-      'Custom creative styling'
-    ],
-    crossSellIds: ['prod_social_video', 'addon_express_delivery'],
-    crossSellReasons: {
-      prod_social_video: 'Upgrade to a dynamic vertical video for 4x higher viral potential.',
-      addon_express_delivery: 'Fast-track your post for 24-hour publish timeline.'
+      prod_featured_article: 'Featured Article Package',
+      prod_in_carousel_ig: 'In-Carousel Instagram Placement'
     }
   }
 ];
 
 const DEFAULT_PRODUCT_COUNTRIES = [
   // Lebanon
-  { id: 'pc_fa_lb', productId: 'prod_featured_article', countryId: 'lb', price: 750, currency: 'USD', isAvailable: true },
-  { id: 'pc_sv_lb', productId: 'prod_social_video', countryId: 'lb', price: 950, currency: 'USD', isAvailable: true },
-  { id: 'pc_db_lb', productId: 'prod_display_banner', countryId: 'lb', price: 300, currency: 'USD', isAvailable: true },
-  { id: 'pc_nf_lb', productId: 'prod_newsletter_feature', countryId: 'lb', price: 450, currency: 'USD', isAvailable: true },
-  { id: 'pc_sp_lb', productId: 'prod_dedicated_social_post', countryId: 'lb', price: 500, currency: 'USD', isAvailable: true },
+  { id: 'pc_fa_lb', productId: 'prod_featured_article', countryId: 'lb', price: 2000, currency: 'USD', isAvailable: true },
+  { id: 'pc_ic_lb', productId: 'prod_in_carousel_ig', countryId: 'lb', price: 500, currency: 'USD', isAvailable: true },
+  { id: 'pc_ev_lb', productId: 'prod_event_package', countryId: 'lb', price: 1000, currency: 'USD', isAvailable: true },
 
   // Saudi Arabia
-  { id: 'pc_fa_sa', productId: 'prod_featured_article', countryId: 'sa', price: 1200, currency: 'USD', isAvailable: true },
-  { id: 'pc_sv_sa', productId: 'prod_social_video', countryId: 'sa', price: 1500, currency: 'USD', isAvailable: true },
-  { id: 'pc_db_sa', productId: 'prod_display_banner', countryId: 'sa', price: 500, currency: 'USD', isAvailable: true },
-  { id: 'pc_nf_sa', productId: 'prod_newsletter_feature', countryId: 'sa', price: 750, currency: 'USD', isAvailable: true },
-  { id: 'pc_sp_sa', productId: 'prod_dedicated_social_post', countryId: 'sa', price: 800, currency: 'USD', isAvailable: true },
+  { id: 'pc_fa_sa', productId: 'prod_featured_article', countryId: 'sa', price: 2000, currency: 'USD', isAvailable: true },
+  { id: 'pc_ic_sa', productId: 'prod_in_carousel_ig', countryId: 'sa', price: 500, currency: 'USD', isAvailable: true },
+  { id: 'pc_ev_sa', productId: 'prod_event_package', countryId: 'sa', price: 1000, currency: 'USD', isAvailable: true },
 
   // UAE
-  { id: 'pc_fa_ae', productId: 'prod_featured_article', countryId: 'ae', price: 1200, currency: 'USD', isAvailable: true },
-  { id: 'pc_sv_ae', productId: 'prod_social_video', countryId: 'ae', price: 1500, currency: 'USD', isAvailable: true },
-  { id: 'pc_db_ae', productId: 'prod_display_banner', countryId: 'ae', price: 500, currency: 'USD', isAvailable: true },
-  { id: 'pc_nf_ae', productId: 'prod_newsletter_feature', countryId: 'ae', price: 750, currency: 'USD', isAvailable: true },
-  { id: 'pc_sp_ae', productId: 'prod_dedicated_social_post', countryId: 'ae', price: 800, currency: 'USD', isAvailable: true }
+  { id: 'pc_fa_ae', productId: 'prod_featured_article', countryId: 'ae', price: 2000, currency: 'USD', isAvailable: true },
+  { id: 'pc_ic_ae', productId: 'prod_in_carousel_ig', countryId: 'ae', price: 500, currency: 'USD', isAvailable: true },
+  { id: 'pc_ev_ae', productId: 'prod_event_package', countryId: 'ae', price: 1000, currency: 'USD', isAvailable: true }
 ];
 
 const DEFAULT_ADDONS = [
+  {
+    id: 'addon_plus_2_articles',
+    slug: 'plus-2-article-packages',
+    name: '+2 Article Packages',
+    description: 'Add 2 additional Featured Article Packages.',
+    price: 2000,
+    unit: 'package',
+    allowMultiple: false,
+    compatibleProductIds: ['prod_featured_article']
+  },
+  {
+    id: 'addon_additional_100k_impressions',
+    slug: 'additional-100k-impressions',
+    name: 'Additional 100k Impressions',
+    description: 'Add an additional 100k guaranteed impressions to your carousel placement.',
+    price: 350,
+    unit: 'per 100k impressions',
+    allowMultiple: true,
+    compatibleProductIds: ['prod_in_carousel_ig']
+  },
+  {
+    id: 'addon_event_additional_3_stories',
+    slug: 'event-additional-3-stories',
+    name: 'Additional 3 Event Stories',
+    description: 'Add 3 extra IG stories filmed on site during event coverage.',
+    price: 350,
+    unit: 'per 3 stories',
+    allowMultiple: true,
+    compatibleProductIds: ['prod_event_package']
+  },
+  {
+    id: 'addon_event_recap_reel',
+    slug: 'event-recap-reel',
+    name: 'Event Recap Reel',
+    description: 'Dedicated Instagram & TikTok recap reel produced from event coverage.',
+    price: 750,
+    unit: 'per reel',
+    allowMultiple: false,
+    compatibleProductIds: ['prod_event_package']
+  },
+  {
+    id: 'addon_event_extra_day',
+    slug: 'event-extra-day',
+    name: 'Extra Coverage Day',
+    description: 'Additional day of on-site 961 media team event coverage.',
+    price: 500,
+    unit: 'per day',
+    allowMultiple: true,
+    compatibleProductIds: ['prod_event_package']
+  },
+  {
+    id: 'addon_event_highlight_7d',
+    slug: 'event-highlight-7d',
+    name: '7-Day Event Highlight',
+    description: 'Keep event stories pinned in Instagram story highlights for 7 days.',
+    price: 250,
+    unit: 'per 7-day period',
+    allowMultiple: true,
+    compatibleProductIds: ['prod_event_package']
+  },
   {
     id: 'addon_express_delivery',
     slug: 'express-delivery',
@@ -145,34 +161,8 @@ const DEFAULT_ADDONS = [
     description: 'Fast-track content creation and publish within 24 hours of brief approval.',
     price: 250,
     unit: 'one-time',
-    compatibleProductIds: ['prod_featured_article', 'prod_social_video', 'prod_dedicated_social_post']
-  },
-  {
-    id: 'addon_translation',
-    slug: 'multilingual-translation',
-    name: 'Multilingual Translation (Arabic / French)',
-    description: 'Professional translation and localized content adaptation into Arabic and French.',
-    price: 150,
-    unit: 'per language',
-    compatibleProductIds: ['prod_featured_article', 'prod_newsletter_feature']
-  },
-  {
-    id: 'addon_creative_design',
-    slug: 'creative-design',
-    name: 'Custom Graphics & Creative Design',
-    description: '961 in-house design team creates custom graphic banners and story visual assets.',
-    price: 200,
-    unit: 'one-time',
-    compatibleProductIds: ['prod_display_banner', 'prod_social_video', 'prod_dedicated_social_post']
-  },
-  {
-    id: 'addon_analytics_report',
-    slug: 'analytics-audit',
-    name: 'Detailed Performance Audit Report',
-    description: 'Comprehensive post-campaign report detailing impressions, clicks, demographics, and engagement.',
-    price: 100,
-    unit: 'one-time',
-    compatibleProductIds: ['prod_featured_article', 'prod_social_video', 'prod_display_banner', 'prod_newsletter_feature', 'prod_dedicated_social_post']
+    allowMultiple: false,
+    compatibleProductIds: ['prod_featured_article', 'prod_in_carousel_ig', 'prod_event_package']
   }
 ];
 
@@ -203,7 +193,8 @@ function normalizeCountry(row) {
 
 function normalizeProduct(row) {
   if (!row) return null;
-  return {
+  const maxQty = row.max_quantity !== undefined ? row.max_quantity : (row.maxQuantity !== undefined ? row.maxQuantity : null);
+  const result = {
     id: row.id,
     slug: row.slug,
     name: row.name,
@@ -215,6 +206,10 @@ function normalizeProduct(row) {
     crossSellIds: parseJsonField(row.cross_sell_ids || row.crossSellIds, []),
     crossSellReasons: parseJsonField(row.cross_sell_reasons || row.crossSellReasons, {})
   };
+  if (maxQty !== null && maxQty !== undefined) {
+    result.maxQuantity = parseInt(maxQty, 10);
+  }
+  return result;
 }
 
 function normalizeProductCountry(row) {
@@ -232,6 +227,7 @@ function normalizeProductCountry(row) {
 
 function normalizeAddOn(row) {
   if (!row) return null;
+  const allowMult = row.allow_multiple !== undefined ? row.allow_multiple : (row.allowMultiple !== undefined ? row.allowMultiple : false);
   return {
     id: row.id,
     slug: row.slug,
@@ -239,6 +235,7 @@ function normalizeAddOn(row) {
     description: row.description || '',
     price: parseFloat(row.price || 0),
     unit: row.unit || 'one-time',
+    allowMultiple: Boolean(allowMult),
     compatibleProductIds: parseJsonField(row.compatible_product_ids || row.compatibleProductIds, [])
   };
 }
@@ -516,39 +513,70 @@ async function getAdCatalog(countryCodeOrId = 'lb') {
   };
 }
 
-function createOrUpdateAdvertiserInStore(store, leadData) {
-  const companyName = (leadData.companyName || leadData.brand || 'Unnamed Advertiser').trim();
+function extractLeadAdvertiserInfo(leadData) {
+  const adv = leadData.advertiser || {};
+  const brandName = (adv.brandName || adv.brand || leadData.brandName || leadData.brand || adv.companyName || leadData.companyName || 'Unnamed Advertiser').trim();
+  const companyName = (adv.companyName || leadData.companyName || brandName).trim();
   const companySlug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'company';
+  const fullName = (adv.contactName || adv.fullName || leadData.fullName || leadData.contactName || '').trim();
+  const email = (adv.email || leadData.email || '').trim();
+  const phoneNumber = (adv.phone || adv.phoneNumber || leadData.phoneNumber || leadData.phone || '').trim();
+  const website = (adv.website || leadData.website || '').trim();
+  const industry = (adv.industry || leadData.industry || '').trim();
+  const accountType = (adv.accountType || leadData.accountType || '').trim();
+  const countryId = (leadData.country || leadData.countryId || adv.countryId || 'lb').toLowerCase();
+
+  return {
+    brandName,
+    companyName,
+    companySlug,
+    fullName,
+    email,
+    phoneNumber,
+    website,
+    industry,
+    accountType,
+    countryId
+  };
+}
+
+function createOrUpdateAdvertiserInStore(store, leadData) {
+  const info = extractLeadAdvertiserInfo(leadData);
 
   let advertiser = store.advertisers.find(
-    a => a.companySlug === companySlug || a.companyName.toLowerCase() === companyName.toLowerCase()
+    a => a.companySlug === info.companySlug || a.companyName.toLowerCase() === info.companyName.toLowerCase()
   );
 
   if (!advertiser) {
     advertiser = {
       id: `adv_${crypto.randomBytes(6).toString('hex')}`,
-      companyName,
-      companySlug,
-      brandName: leadData.brand || companyName,
-      website: leadData.website || '',
-      industry: leadData.industry || '',
-      countryId: leadData.countryId || 'lb',
+      companyName: info.companyName,
+      companySlug: info.companySlug,
+      brandName: info.brandName,
+      website: info.website,
+      industry: info.industry,
+      accountType: info.accountType,
+      countryId: info.countryId,
       createdAt: new Date().toISOString()
     };
     store.advertisers.push(advertiser);
+  } else {
+    if (info.website) advertiser.website = info.website;
+    if (info.industry) advertiser.industry = info.industry;
+    if (info.accountType) advertiser.accountType = info.accountType;
   }
 
   let contact = store.contacts.find(
-    c => c.email.toLowerCase() === (leadData.email || '').toLowerCase()
+    c => info.email && c.email.toLowerCase() === info.email.toLowerCase()
   );
 
-  if (!contact && leadData.email) {
+  if (!contact && info.email) {
     contact = {
       id: `cnt_${crypto.randomBytes(6).toString('hex')}`,
       advertiserId: advertiser.id,
-      fullName: leadData.fullName || 'Lead Contact',
-      email: leadData.email,
-      phoneNumber: leadData.phoneNumber || leadData.phone || '',
+      fullName: info.fullName || 'Lead Contact',
+      email: info.email,
+      phoneNumber: info.phoneNumber,
       role: leadData.role || 'Marketing Contact',
       createdAt: new Date().toISOString()
     };
@@ -559,18 +587,14 @@ function createOrUpdateAdvertiserInStore(store, leadData) {
 }
 
 async function createOrUpdateAdvertiser(leadData) {
+  const info = extractLeadAdvertiserInfo(leadData);
   const pool = db.getPool();
 
   if (pool) {
     try {
-      const companyName = (leadData.companyName || leadData.brand || 'Unnamed Advertiser').trim();
-      const companySlug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'company';
-      const brandName = leadData.brand || companyName;
-
-      // Find or insert advertiser
       let advRes = await pool.query(
         'SELECT * FROM advertisers WHERE company_slug = $1 OR LOWER(company_name) = LOWER($2)',
-        [companySlug, companyName]
+        [info.companySlug, info.companyName]
       );
       let advertiser;
 
@@ -580,17 +604,16 @@ async function createOrUpdateAdvertiser(leadData) {
         const advId = `adv_${crypto.randomBytes(6).toString('hex')}`;
         const now = new Date();
         const insRes = await pool.query(
-          `INSERT INTO advertisers (id, company_name, company_slug, brand_name, website, industry, country_id, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-          [advId, companyName, companySlug, brandName, leadData.website || '', leadData.industry || '', leadData.countryId || 'lb', now]
+          `INSERT INTO advertisers (id, company_name, company_slug, brand_name, website, industry, account_type, country_id, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          [advId, info.companyName, info.companySlug, info.brandName, info.website, info.industry, info.accountType, info.countryId, now]
         );
         advertiser = normalizeAdvertiser(insRes.rows[0]);
       }
 
-      // Find or insert contact
       let contact = null;
-      if (leadData.email) {
-        let cntRes = await pool.query('SELECT * FROM contacts WHERE LOWER(email) = LOWER($1)', [leadData.email]);
+      if (info.email) {
+        let cntRes = await pool.query('SELECT * FROM contacts WHERE LOWER(email) = LOWER($1)', [info.email]);
         if (cntRes.rows && cntRes.rows[0]) {
           contact = normalizeContact(cntRes.rows[0]);
         } else {
@@ -599,7 +622,7 @@ async function createOrUpdateAdvertiser(leadData) {
           const insCnt = await pool.query(
             `INSERT INTO contacts (id, advertiser_id, full_name, email, phone_number, role, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [cntId, advertiser.id, leadData.fullName || 'Lead Contact', leadData.email, leadData.phoneNumber || leadData.phone || '', leadData.role || 'Marketing Contact', now]
+            [cntId, advertiser.id, info.fullName || 'Lead Contact', info.email, info.phoneNumber, leadData.role || 'Marketing Contact', now]
           );
           contact = normalizeContact(insCnt.rows[0]);
         }
@@ -617,15 +640,164 @@ async function createOrUpdateAdvertiser(leadData) {
   return res;
 }
 
+function calculateHaversineDistanceKm(lat1, lon1, lat2 = 33.8969, lon2 = 35.5017) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 async function createLeadCampaign(campaignData) {
-  let computedTotal = parseFloat(campaignData.totalAmount || 0);
-  if ((isNaN(computedTotal) || computedTotal <= 0) && Array.isArray(campaignData.items)) {
-    computedTotal = campaignData.items.reduce((sum, item) => {
-      const uPrice = parseFloat(item.unitPrice || item.price || 0);
-      const qty = parseInt(item.quantity || 1, 10);
-      return sum + (item.totalPrice ? parseFloat(item.totalPrice) : uPrice * qty);
-    }, 0);
+  const info = extractLeadAdvertiserInfo(campaignData);
+
+  if (!info.email || !info.fullName) {
+    const err = new Error('Full name and email are required.');
+    err.statusCode = 400;
+    throw err;
   }
+
+  // Fetch catalog for country
+  const catalog = await getAdCatalog(info.countryId);
+  const catalogProducts = catalog.products || [];
+  const catalogAddOns = catalog.addOns || [];
+
+  // Extract products from cart / items
+  const rawCart = Array.isArray(campaignData.cart) ? campaignData.cart : (Array.isArray(campaignData.items) ? campaignData.items : []);
+  const cartItems = rawCart.map(item => ({
+    productId: item.productId || item.id,
+    quantity: parseInt(item.quantity || 1, 10),
+    unitPrice: item.unitPrice !== undefined ? parseFloat(item.unitPrice) : (item.price !== undefined ? parseFloat(item.price) : null),
+    details: item.details || {}
+  }));
+
+  // Extract add-ons
+  const rawAddOns = Array.isArray(campaignData.addOns) ? campaignData.addOns : [];
+  const addOnsItems = rawAddOns.map(a => ({
+    addOnId: a.addOnId || a.id,
+    parentProductId: a.parentProductId,
+    quantity: parseInt(a.quantity || 1, 10),
+    unitPrice: a.unitPrice !== undefined ? parseFloat(a.unitPrice) : (a.price !== undefined ? parseFloat(a.price) : null)
+  }));
+
+  // 1. Sum base product prices & validate maxQuantity
+  let productSum = 0;
+  const validatedCart = [];
+  const cartProductIds = cartItems.map(i => i.productId);
+
+  for (const item of cartItems) {
+    const catProd = catalogProducts.find(p => p.id === item.productId);
+
+    if (catProd && catProd.maxQuantity && item.quantity > catProd.maxQuantity) {
+      const err = new Error(`Quantity ${item.quantity} exceeds maximum allowed quantity (${catProd.maxQuantity}) for product ${catProd.name || item.productId}.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const price = catProd ? catProd.price : (item.unitPrice !== null ? item.unitPrice : 0);
+    const itemTotal = price * item.quantity;
+    productSum += itemTotal;
+
+    validatedCart.push({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: price,
+      totalPrice: itemTotal,
+      details: item.details
+    });
+  }
+
+  // 2. Validate product-bound add-ons & sum add-on prices
+  let addOnSum = 0;
+  const validatedAddOns = [];
+
+  for (const addOn of addOnsItems) {
+    const catAddOn = catalogAddOns.find(a => a.id === addOn.addOnId);
+
+    // Validate parent product presence
+    if (catAddOn && Array.isArray(catAddOn.compatibleProductIds) && catAddOn.compatibleProductIds.length > 0) {
+      const isCompatible = cartProductIds.some(pId => catAddOn.compatibleProductIds.includes(pId));
+      if (!isCompatible) {
+        const err = new Error(`Add-on ${catAddOn.name || addOn.addOnId} requires a compatible parent product in cart.`);
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
+    // Validate allowMultiple
+    if (catAddOn && !catAddOn.allowMultiple && addOn.quantity > 1) {
+      const err = new Error(`Add-on ${catAddOn.name || addOn.addOnId} does not allow multiple quantities.`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const price = catAddOn ? catAddOn.price : (addOn.unitPrice !== null ? addOn.unitPrice : 0);
+    const addOnTotal = price * addOn.quantity;
+    addOnSum += addOnTotal;
+
+    const parentProductId = addOn.parentProductId || (catAddOn && catAddOn.compatibleProductIds ? catAddOn.compatibleProductIds.find(pId => cartProductIds.includes(pId)) : null);
+
+    validatedAddOns.push({
+      addOnId: addOn.addOnId,
+      name: catAddOn ? catAddOn.name : addOn.addOnId,
+      parentProductId,
+      quantity: addOn.quantity,
+      unitPrice: price,
+      totalPrice: addOnTotal
+    });
+  }
+
+  // 3. Distance Surcharge Calculation
+  let distanceSurcharge = 0;
+  let distanceSurchargeDetails = { amount: 0, applied: false, distanceKm: null, reason: 'No venue location provided' };
+  const campaignDetails = campaignData.campaignDetails || {};
+  const eventDetails = campaignDetails.eventDetails || campaignData.eventDetails || null;
+
+  if (eventDetails) {
+    let distanceKm = null;
+    if (eventDetails.lat != null && eventDetails.lng != null && !isNaN(parseFloat(eventDetails.lat)) && !isNaN(parseFloat(eventDetails.lng))) {
+      distanceKm = calculateHaversineDistanceKm(parseFloat(eventDetails.lat), parseFloat(eventDetails.lng));
+      eventDetails.distanceKm = Math.round(distanceKm * 10) / 10;
+    } else if (eventDetails.distanceKm !== undefined && eventDetails.distanceKm !== null && !isNaN(parseFloat(eventDetails.distanceKm))) {
+      distanceKm = parseFloat(eventDetails.distanceKm);
+    }
+
+    if (distanceKm !== null && distanceKm > 25) {
+      distanceSurcharge = 150;
+      distanceSurchargeDetails = {
+        amount: 150,
+        applied: true,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        reason: 'Venue location exceeds 25 km from Beirut Downtown'
+      };
+    } else if (distanceKm !== null) {
+      distanceSurchargeDetails = {
+        amount: 0,
+        applied: false,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        reason: 'Venue location within 25 km from Beirut Downtown'
+      };
+    }
+  }
+
+  let totalAmount = productSum + addOnSum + distanceSurcharge;
+  if (totalAmount === 0 && campaignData.totalAmount) {
+    totalAmount = parseFloat(campaignData.totalAmount);
+  }
+
+  const completeCampaignDetails = {
+    ...campaignDetails,
+    eventDetails,
+    distanceSurcharge: distanceSurchargeDetails,
+    addOns: validatedAddOns,
+    assets: campaignData.assets || (campaignDetails && campaignDetails.assets) || []
+  };
+
+  const notesContent = JSON.stringify(completeCampaignDetails);
 
   const pool = db.getPool();
 
@@ -647,15 +819,15 @@ async function createLeadCampaign(campaignData) {
           advertiser.id,
           contact ? contact.id : null,
           campaignData.name || `${advertiser.brandName} Campaign`,
-          campaignData.objective || 'Brand Awareness',
-          campaignData.countryId || 'lb',
+          campaignData.objective || (campaignDetails.objectiveNotes || 'Brand Awareness'),
+          info.countryId,
           campaignData.status || 'lead_captured',
-          computedTotal,
+          totalAmount,
           campaignData.currency || 'USD',
           accessToken,
           slackChannel,
           sessionId,
-          campaignData.notes || '',
+          notesContent,
           now
         ]
       );
@@ -663,18 +835,13 @@ async function createLeadCampaign(campaignData) {
       const campaign = normalizeCampaign(insCmp.rows[0]);
 
       // Items
-      if (Array.isArray(campaignData.items)) {
-        for (const item of campaignData.items) {
-          const itemId = `citem_${crypto.randomBytes(6).toString('hex')}`;
-          const qty = parseInt(item.quantity || 1, 10);
-          const uPrice = parseFloat(item.unitPrice || item.price || 0);
-          const tPrice = parseFloat(item.totalPrice || qty * uPrice);
-          await pool.query(
-            `INSERT INTO campaign_items (id, campaign_id, product_id, quantity, unit_price, total_price, add_ons, details, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [itemId, campaign.id, item.productId, qty, uPrice, tPrice, JSON.stringify(item.addOns || []), JSON.stringify(item.details || {}), now]
-          );
-        }
+      for (const item of validatedCart) {
+        const itemId = `citem_${crypto.randomBytes(6).toString('hex')}`;
+        await pool.query(
+          `INSERT INTO campaign_items (id, campaign_id, product_id, quantity, unit_price, total_price, add_ons, details, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [itemId, campaign.id, item.productId, item.quantity, item.unitPrice, item.totalPrice, JSON.stringify(validatedAddOns), JSON.stringify(item.details || {}), now]
+        );
       }
 
       // Conversation message
@@ -688,6 +855,7 @@ async function createLeadCampaign(campaignData) {
 
       return { campaign, advertiser, contact, accessToken, sessionId };
     } catch (err) {
+      if (err.statusCode) throw err;
       console.warn('Postgres createLeadCampaign failed, falling back to memory store:', err.message);
     }
   }
@@ -708,37 +876,35 @@ async function createLeadCampaign(campaignData) {
     advertiserId: advertiser.id,
     contactId: contact ? contact.id : null,
     name: campaignData.name || `${advertiser.brandName} Campaign`,
-    objective: campaignData.objective || 'Brand Awareness',
-    countryId: campaignData.countryId || 'lb',
+    objective: campaignData.objective || (campaignDetails.objectiveNotes || 'Brand Awareness'),
+    countryId: info.countryId,
     status: campaignData.status || 'lead_captured',
-    totalAmount: computedTotal,
+    totalAmount,
     currency: campaignData.currency || 'USD',
     accessToken,
     slackChannel,
     sessionId,
     transactionId: campaignData.transactionId || null,
-    notes: campaignData.notes || '',
+    notes: notesContent,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
   store.campaigns.push(newCampaign);
 
-  if (Array.isArray(campaignData.items)) {
-    campaignData.items.forEach(item => {
-      store.campaignItems.push({
-        id: `citem_${crypto.randomBytes(6).toString('hex')}`,
-        campaignId: newCampaign.id,
-        productId: item.productId,
-        quantity: parseInt(item.quantity || 1, 10),
-        unitPrice: parseFloat(item.unitPrice || item.price || 0),
-        totalPrice: parseFloat(item.totalPrice || (item.quantity || 1) * (item.unitPrice || item.price || 0)),
-        addOns: item.addOns || [],
-        details: item.details || {},
-        createdAt: new Date().toISOString()
-      });
+  validatedCart.forEach(item => {
+    store.campaignItems.push({
+      id: `citem_${crypto.randomBytes(6).toString('hex')}`,
+      campaignId: newCampaign.id,
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+      addOns: validatedAddOns,
+      details: item.details || {},
+      createdAt: new Date().toISOString()
     });
-  }
+  });
 
   store.conversations.push({
     id: `msg_${crypto.randomBytes(6).toString('hex')}`,
@@ -751,6 +917,97 @@ async function createLeadCampaign(campaignData) {
 
   await saveStore(store);
   return { campaign: newCampaign, advertiser, contact, accessToken, sessionId };
+}
+
+async function formatWorkspaceSummary(campaign, advertiser, contact, items, assets, messages) {
+  let campaignDetails = {};
+  if (campaign && campaign.notes) {
+    if (typeof campaign.notes === 'object') {
+      campaignDetails = campaign.notes;
+    } else {
+      try {
+        campaignDetails = JSON.parse(campaign.notes);
+      } catch (e) {
+        campaignDetails = {};
+      }
+    }
+  }
+
+  const countryId = campaign ? (campaign.countryId || 'lb') : 'lb';
+  const catalog = await getAdCatalog(countryId);
+  const catalogProducts = catalog.products || [];
+  const catalogAddOns = catalog.addOns || [];
+
+  const products = (items || []).map(item => {
+    const catP = catalogProducts.find(p => p.id === item.productId);
+    return {
+      productId: item.productId,
+      name: catP ? catP.name : item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+      inclusions: catP ? catP.inclusions : [],
+      details: item.details || {}
+    };
+  });
+
+  const eventDetails = campaignDetails ? campaignDetails.eventDetails : null;
+  const eventSchedule = eventDetails && Array.isArray(eventDetails.schedule) ? eventDetails.schedule : [];
+
+  const distanceSurcharge = (campaignDetails && campaignDetails.distanceSurcharge) || { amount: 0, applied: false, distanceKm: null };
+
+  const rawAddOns = (campaignDetails && Array.isArray(campaignDetails.addOns)) ? campaignDetails.addOns : [];
+
+  const matchedAddOnKeys = new Set();
+  const parentGroupedAddOns = (items || []).map(item => {
+    const catP = catalogProducts.find(p => p.id === item.productId);
+    const matched = rawAddOns.filter(a => {
+      const aKey = a.addOnId || a.id;
+      if (a.parentProductId) {
+        if (a.parentProductId === item.productId) {
+          matchedAddOnKeys.add(aKey);
+          return true;
+        }
+        return false;
+      }
+      const catA = catalogAddOns.find(x => x.id === aKey);
+      if (catA && catA.compatibleProductIds && catA.compatibleProductIds.includes(item.productId)) {
+        matchedAddOnKeys.add(aKey);
+        return true;
+      }
+      return false;
+    });
+    return {
+      parentProductId: item.productId,
+      parentProductName: catP ? catP.name : item.productId,
+      addOns: matched
+    };
+  }).filter(group => group.addOns.length > 0);
+
+  const unmatchedAddOns = rawAddOns.filter(a => !matchedAddOnKeys.has(a.addOnId || a.id));
+  if (unmatchedAddOns.length > 0 && parentGroupedAddOns.length > 0) {
+    parentGroupedAddOns.push({
+      parentProductId: null,
+      parentProductName: 'General Add-ons',
+      addOns: unmatchedAddOns
+    });
+  }
+
+  const formattedAddOns = parentGroupedAddOns.length > 0 ? parentGroupedAddOns : rawAddOns;
+
+  return {
+    campaign,
+    workspaceUrl: campaign ? `/workspace/${campaign.accessToken}` : null,
+    advertiser,
+    contact,
+    items,
+    products,
+    addOns: formattedAddOns,
+    eventSchedule,
+    distanceSurcharge,
+    assets: assets || [],
+    messages: messages || []
+  };
 }
 
 async function getCampaignByToken(token) {
@@ -786,7 +1043,7 @@ async function getCampaignByToken(token) {
         );
         const messages = (msgsRes.rows || []).map(normalizeConversation);
 
-        return { campaign, advertiser, contact, items, assets, messages };
+        return await formatWorkspaceSummary(campaign, advertiser, contact, items, assets, messages);
       }
     } catch (err) {
       console.warn('Postgres getCampaignByToken failed, falling back to memory store:', err.message);
@@ -803,14 +1060,7 @@ async function getCampaignByToken(token) {
   const campaignAssets = store.assets.filter(a => a.campaignId === campaign.id || (campaign.sessionId && a.sessionId === campaign.sessionId));
   const messages = store.conversations.filter(m => m.campaignId === campaign.id).sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-  return {
-    campaign,
-    advertiser,
-    contact,
-    items,
-    assets: campaignAssets,
-    messages
-  };
+  return await formatWorkspaceSummary(campaign, advertiser, contact, items, campaignAssets, messages);
 }
 
 async function addConversationMessage(tokenOrCampaignId, senderType, senderName, message) {

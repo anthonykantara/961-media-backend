@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS products (
     category VARCHAR(100) NOT NULL,
     base_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     unit VARCHAR(100) NOT NULL DEFAULT 'per item',
+    max_quantity INTEGER,
     inclusions JSONB DEFAULT '[]'::jsonb,
     cross_sell_ids JSONB DEFAULT '[]'::jsonb,
     cross_sell_reasons JSONB DEFAULT '{}'::jsonb,
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS add_ons (
     description TEXT,
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     unit VARCHAR(100) NOT NULL DEFAULT 'one-time',
+    allow_multiple BOOLEAN NOT NULL DEFAULT false,
     compatible_product_ids JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -53,6 +55,7 @@ CREATE TABLE IF NOT EXISTS advertisers (
     brand_name VARCHAR(255) NOT NULL,
     website VARCHAR(255),
     industry VARCHAR(100),
+    account_type VARCHAR(100),
     country_id VARCHAR(50) REFERENCES countries(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -127,37 +130,52 @@ INSERT INTO countries (id, code, name, currency, is_active) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed Default Products
-INSERT INTO products (id, slug, name, description, category, base_price, unit, inclusions, cross_sell_ids, cross_sell_reasons) VALUES
-('prod_featured_article', 'featured-article', 'Featured Article & Editorial Story', 'In-depth storytelling written by 961 editorial staff and published across web & news feed.', 'Editorial', 750.00, 'per article', '["Full editorial article written by 961 staff", "Permanent publication on 961.co", "Social media broadcast on Facebook & X", "Dofollow SEO backlinks"]'::jsonb, '["prod_social_video", "prod_newsletter_feature"]'::jsonb, '{"prod_social_video": "Amplify editorial reach by 3x with a dedicated TikTok & Instagram Reel video.", "prod_newsletter_feature": "Get instant day-one exposure by featuring in The961 Morning Brief."}'::jsonb),
-('prod_social_video', 'social-video', 'Dedicated Social Video Reel / TikTok', 'High-impact short-form video produced or formatted for 961 Instagram Reel & TikTok channels.', 'Social', 950.00, 'per video', '["1080x1920 HD vertical video reel", "Published on 961 Instagram & TikTok", "Interactive story highlight placement", "Targeted audience engagement report"]'::jsonb, '["prod_featured_article", "addon_express_delivery"]'::jsonb, '{"prod_featured_article": "Pair your video with a long-form article for permanent Google SEO ranking.", "addon_express_delivery": "Publish within 24 hours of brief approval with express queue processing."}'::jsonb),
-('prod_display_banner', 'display-banner', 'Responsive Display Banner Network', 'High-visibility Leaderboard (728x90) and MPU (300x250) banner impressions across key article pages.', 'Display', 300.00, 'per 10,000 impressions', '["Leaderboard & MPU banner ad slots", "Geo-targeted audience delivery", "Real-time CTR and impression analytics", "Desktop & Mobile optimization"]'::jsonb, '["prod_featured_article", "prod_newsletter_feature"]'::jsonb, '{"prod_featured_article": "Drive targeted traffic directly from display banners to your featured article.", "prod_newsletter_feature": "Extend banner exposure to high-intent email subscribers."}'::jsonb),
-('prod_newsletter_feature', 'newsletter-feature', 'Daily Morning Brief Newsletter Sponsor', 'Top header takeover or dedicated sponsored story segment in 961 daily morning newsletter.', 'Newsletter', 450.00, 'per edition', '["Top header logo takeover & headline blurb", "Direct URL tracking link", "Delivered to 45,000+ active subscribers", "50%+ average open rate"]'::jsonb, '["prod_featured_article", "addon_translation"]'::jsonb, '{"prod_featured_article": "Link newsletter readers to a comprehensive editorial feature story.", "addon_translation": "Reach Arabic & French readers with localized newsletter editions."}'::jsonb),
-('prod_dedicated_social_post', 'dedicated-social-post', 'Dedicated Social Feed Post', 'Single image or carousel post on 961 social media channels with brand tag & link.', 'Social', 500.00, 'per post', '["Single/Carousel post on Instagram & Facebook", "Tag brand account & link in bio", "Custom creative styling"]'::jsonb, '["prod_social_video", "addon_express_delivery"]'::jsonb, '{"prod_social_video": "Upgrade to a dynamic vertical video for 4x higher viral potential.", "addon_express_delivery": "Fast-track your post for 24-hour publish timeline."}'::jsonb)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO products (id, slug, name, description, category, base_price, unit, max_quantity, inclusions, cross_sell_ids, cross_sell_reasons) VALUES
+('prod_featured_article', 'featured-article', 'Featured Article Package', 'Custom engaging article in 3 languages, Instagram Carousel, IG post shared to Stories, Facebook post, LinkedIn post, WhatsApp channel update', 'Editorial', 2000.00, 'per package', NULL, '["Custom engaging article in 3 languages", "Instagram Carousel", "IG post shared to Stories", "Facebook post", "LinkedIn post", "WhatsApp channel update"]'::jsonb, '["prod_in_carousel_ig", "addon_plus_2_articles"]'::jsonb, '{"prod_in_carousel_ig": "In-Carousel Instagram Placement", "addon_plus_2_articles": "Add 2 additional Featured Article Packages"}'::jsonb),
+('prod_in_carousel_ig', 'in-carousel-ig', 'In-Carousel Instagram Placement', 'Dedicated slide placement in 961 Instagram carousel post (100k impressions guaranteed)', 'Social', 500.00, 'per 100k impressions guaranteed', NULL, '["100k impressions guaranteed", "Dedicated slide placement before final carousel slide", "Published on @961app Instagram page"]'::jsonb, '["prod_featured_article", "addon_express_delivery"]'::jsonb, '{"prod_featured_article": "Featured Article Package", "addon_express_delivery": "Express Delivery"}'::jsonb),
+('prod_event_package', 'event-package', 'Event Coverage Package', 'On-site 961 media team coverage for event launches or openings', 'Event', 1000.00, 'per event', 1, '["3 IG stories filmed on site of an event (e.g. launch or opening)", "Clear & subtle brand tag included in the first and last story", "On-site 961 media team coverage"]'::jsonb, '["prod_featured_article", "prod_in_carousel_ig"]'::jsonb, '{"prod_featured_article": "Featured Article Package", "prod_in_carousel_ig": "In-Carousel Instagram Placement"}'::jsonb)
+ON CONFLICT (id) DO UPDATE SET
+  slug = EXCLUDED.slug,
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  category = EXCLUDED.category,
+  base_price = EXCLUDED.base_price,
+  unit = EXCLUDED.unit,
+  max_quantity = EXCLUDED.max_quantity,
+  inclusions = EXCLUDED.inclusions,
+  cross_sell_ids = EXCLUDED.cross_sell_ids,
+  cross_sell_reasons = EXCLUDED.cross_sell_reasons;
 
 -- Seed Default Product Countries
 INSERT INTO product_countries (id, product_id, country_id, price, currency, is_available) VALUES
-('pc_fa_lb', 'prod_featured_article', 'lb', 750.00, 'USD', true),
-('pc_sv_lb', 'prod_social_video', 'lb', 950.00, 'USD', true),
-('pc_db_lb', 'prod_display_banner', 'lb', 300.00, 'USD', true),
-('pc_nf_lb', 'prod_newsletter_feature', 'lb', 450.00, 'USD', true),
-('pc_sp_lb', 'prod_dedicated_social_post', 'lb', 500.00, 'USD', true),
-('pc_fa_sa', 'prod_featured_article', 'sa', 1200.00, 'USD', true),
-('pc_sv_sa', 'prod_social_video', 'sa', 1500.00, 'USD', true),
-('pc_db_sa', 'prod_display_banner', 'sa', 500.00, 'USD', true),
-('pc_nf_sa', 'prod_newsletter_feature', 'sa', 750.00, 'USD', true),
-('pc_sp_sa', 'prod_dedicated_social_post', 'sa', 800.00, 'USD', true),
-('pc_fa_ae', 'prod_featured_article', 'ae', 1200.00, 'USD', true),
-('pc_sv_ae', 'prod_social_video', 'ae', 1500.00, 'USD', true),
-('pc_db_ae', 'prod_display_banner', 'ae', 500.00, 'USD', true),
-('pc_nf_ae', 'prod_newsletter_feature', 'ae', 750.00, 'USD', true),
-('pc_sp_ae', 'prod_dedicated_social_post', 'ae', 800.00, 'USD', true)
-ON CONFLICT (id) DO NOTHING;
+('pc_fa_lb', 'prod_featured_article', 'lb', 2000.00, 'USD', true),
+('pc_ic_lb', 'prod_in_carousel_ig', 'lb', 500.00, 'USD', true),
+('pc_ev_lb', 'prod_event_package', 'lb', 1000.00, 'USD', true),
+('pc_fa_sa', 'prod_featured_article', 'sa', 2000.00, 'USD', true),
+('pc_ic_sa', 'prod_in_carousel_ig', 'sa', 500.00, 'USD', true),
+('pc_ev_sa', 'prod_event_package', 'sa', 1000.00, 'USD', true),
+('pc_fa_ae', 'prod_featured_article', 'ae', 2000.00, 'USD', true),
+('pc_ic_ae', 'prod_in_carousel_ig', 'ae', 500.00, 'USD', true),
+('pc_ev_ae', 'prod_event_package', 'ae', 1000.00, 'USD', true)
+ON CONFLICT (id) DO UPDATE SET
+  price = EXCLUDED.price,
+  currency = EXCLUDED.currency,
+  is_available = EXCLUDED.is_available;
 
 -- Seed Default Add-Ons
-INSERT INTO add_ons (id, slug, name, description, price, unit, compatible_product_ids) VALUES
-('addon_express_delivery', 'express-delivery', 'Express 24-Hour Production & Delivery', 'Fast-track content creation and publish within 24 hours of brief approval.', 250.00, 'one-time', '["prod_featured_article", "prod_social_video", "prod_dedicated_social_post"]'::jsonb),
-('addon_translation', 'multilingual-translation', 'Multilingual Translation (Arabic / French)', 'Professional translation and localized content adaptation into Arabic and French.', 150.00, 'per language', '["prod_featured_article", "prod_newsletter_feature"]'::jsonb),
-('addon_creative_design', 'creative-design', 'Custom Graphics & Creative Design', '961 in-house design team creates custom graphic banners and story visual assets.', 200.00, 'one-time', '["prod_display_banner", "prod_social_video", "prod_dedicated_social_post"]'::jsonb),
-('addon_analytics_report', 'analytics-audit', 'Detailed Performance Audit Report', 'Comprehensive post-campaign report detailing impressions, clicks, demographics, and engagement.', 100.00, 'one-time', '["prod_featured_article", "prod_social_video", "prod_display_banner", "prod_newsletter_feature", "prod_dedicated_social_post"]'::jsonb)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO add_ons (id, slug, name, description, price, unit, allow_multiple, compatible_product_ids) VALUES
+('addon_plus_2_articles', 'plus-2-article-packages', '+2 Article Packages', 'Add 2 additional Featured Article Packages.', 2000.00, 'package', false, '["prod_featured_article"]'::jsonb),
+('addon_additional_100k_impressions', 'additional-100k-impressions', 'Additional 100k Impressions', 'Add an additional 100k guaranteed impressions to your carousel placement.', 350.00, 'per 100k impressions', true, '["prod_in_carousel_ig"]'::jsonb),
+('addon_event_additional_3_stories', 'event-additional-3-stories', 'Additional 3 Event Stories', 'Add 3 extra IG stories filmed on site during event coverage.', 350.00, 'per 3 stories', true, '["prod_event_package"]'::jsonb),
+('addon_event_recap_reel', 'event-recap-reel', 'Event Recap Reel', 'Dedicated Instagram & TikTok recap reel produced from event coverage.', 750.00, 'per reel', false, '["prod_event_package"]'::jsonb),
+('addon_event_extra_day', 'event-extra-day', 'Extra Coverage Day', 'Additional day of on-site 961 media team event coverage.', 500.00, 'per day', true, '["prod_event_package"]'::jsonb),
+('addon_event_highlight_7d', 'event-highlight-7d', '7-Day Event Highlight', 'Keep event stories pinned in Instagram story highlights for 7 days.', 250.00, 'per 7-day period', true, '["prod_event_package"]'::jsonb),
+('addon_express_delivery', 'express-delivery', 'Express 24-Hour Production & Delivery', 'Fast-track content creation and publish within 24 hours of brief approval.', 250.00, 'one-time', false, '["prod_featured_article", "prod_in_carousel_ig", "prod_event_package"]'::jsonb)
+ON CONFLICT (id) DO UPDATE SET
+  slug = EXCLUDED.slug,
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  price = EXCLUDED.price,
+  unit = EXCLUDED.unit,
+  allow_multiple = EXCLUDED.allow_multiple,
+  compatible_product_ids = EXCLUDED.compatible_product_ids;
