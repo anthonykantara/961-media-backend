@@ -27,10 +27,6 @@ router.get('/ad-catalog', async (req, res, next) => {
 router.post('/campaigns/lead', async (req, res, next) => {
   try {
     const leadData = req.body || {};
-    if (!leadData.email || !leadData.fullName) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Full name and email are required.' });
-    }
-
     const result = await adsStore.createLeadCampaign(leadData);
 
     // Trigger Slack channel prep asynchronously
@@ -40,7 +36,7 @@ router.post('/campaigns/lead', async (req, res, next) => {
         totalAmount: result.campaign.totalAmount,
         objective: result.campaign.objective,
         status: result.campaign.status,
-        email: leadData.email
+        email: result.contact ? result.contact.email : (leadData.email || (leadData.advertiser && leadData.advertiser.email))
       }).catch(() => {});
     }
 
@@ -49,9 +45,12 @@ router.post('/campaigns/lead', async (req, res, next) => {
       campaign: result.campaign,
       accessToken: result.accessToken,
       sessionId: result.sessionId,
-      workspaceUrl: `/campaign/${result.accessToken}`
+      workspaceUrl: `/workspace/${result.accessToken}`
     });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: 'Bad Request', message: err.message });
+    }
     next(err);
   }
 });
@@ -155,7 +154,7 @@ router.post('/webhooks/payment', async (req, res, next) => {
       message: 'Payment verified and campaign activated.',
       campaign,
       accessToken: campaign ? campaign.accessToken : null,
-      workspaceUrl: campaign ? `/campaign/${campaign.accessToken}` : null
+      workspaceUrl: campaign ? `/workspace/${campaign.accessToken}` : null
     });
   } catch (err) {
     next(err);
