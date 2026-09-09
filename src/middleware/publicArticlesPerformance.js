@@ -14,9 +14,59 @@ function setPublicCache(res, maxAgeSeconds, staleWhileRevalidateSeconds = DEFAUL
   res.vary('Origin');
 }
 
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+function parseArrayField(field) {
+  if (Array.isArray(field)) return field;
+  if (typeof field === 'string') {
+    try {
+      const parsed = JSON.parse(field);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function formatArticleRecord(row) {
+  if (!row) return null;
+  const redirects = parseArrayField(row.redirects);
+  const image = row.image || row.image_url || row.imageUrl || '';
+  const permalink = row.permalink || row.slug || '';
+  let options = row.options || row.dispatchOptions || {};
+  if (typeof options === 'string') {
+    try {
+      options = JSON.parse(options);
+    } catch {
+      options = {};
+    }
+  }
+
+  return {
+    id: row.id,
+    title: row.title || '',
+    permalink,
+    slug: permalink,
+    redirects,
+    previousPermalinks: parseArrayField(row.previous_permalinks || row.previousPermalinks || row.redirects),
+    content: row.content || '',
+    summary: row.summary || '',
+    author: row.author || '',
+    category: row.category || '',
+    image,
+    imageUrl: image,
+    status: row.status || 'draft',
+    publish_at: row.publish_at || row.publishAt || row.scheduledAt || null,
+    publishAt: row.publish_at || row.publishAt || row.scheduledAt || null,
+    options,
+    locationId: row.location_id || row.locationId || 'lb',
+    language: row.language || 'en',
+    date: row.date || '',
+    time: row.time || '',
+    views: String(row.views !== undefined ? row.views : '0'),
+    shares: String(row.shares !== undefined ? row.shares : '0'),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : (row.createdAt || new Date().toISOString()),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : (row.updatedAt || new Date().toISOString())
+  };
 }
 
 function buildArticleFilters(query) {
@@ -52,87 +102,71 @@ function buildArticleFilters(query) {
     add('LOWER(a.language) = ?', language.toLowerCase());
   }
   if (search) {
-    add(`(
-      LOWER(a.title) LIKE '%' || ? || '%'
-      OR LOWER(a.content) LIKE '%' || $${params.length + 1} || '%'
-      OR LOWER(a.summary) LIKE '%' || $${params.length + 2} || '%'
-      OR LOWER(a.author) LIKE '%' || $${params.length + 3} || '%'
-      OR LOWER(a.category) LIKE '%' || $${params.length + 4} || '%'
-    )`, search.toLowerCase());
-    params.push(search.toLowerCase(), search.toLowerCase(), search.toLowerCase(), search.toLowerCase());
+    const searchParam = params.length + 1;
+    params.push(search.toLowerCase());
+    conditions.push(`(
+      LOWER(a.title) LIKE '%' || $${searchParam} || '%'
+      OR LOWER(a.content) LIKE '%' || $${searchParam} || '%'
+      OR LOWER(a.summary) LIKE '%' || $${searchParam} || '%'
+      OR LOWER(a.author) LIKE '%' || $${searchParam} || '%'
+      OR LOWER(a.category) LIKE '%' || $${searchParam} || '%'
+    )`);
   }
 
   if (permalink) {
-    add(`(
-      LOWER(a.permalink) = ?
-      OR LOWER(a.slug) = $${params.length + 1}
-      OR a.redirects @> jsonb_build_array($${params.length + 2}::text)
-      OR a.previous_permalinks @> jsonb_build_array($${params.length + 3}::text)
+    const valueParam = params.length + 1;
+    params.push(permalink);
+    conditions.push(`(
+      LOWER(a.permalink) = $${valueParam}
+      OR LOWER(a.slug) = $${valueParam}
+      OR a.redirects @> jsonb_build_array($${valueParam}::text)
+      OR a.previous_permalinks @> jsonb_build_array($${valueParam}::text)
       OR EXISTS (
         SELECT 1 FROM article_redirects ar
-        WHERE ar.article_id = a.id AND LOWER(ar.old_permalink) = $${params.length + 4}
+        WHERE ar.article_id = a.id AND LOWER(ar.old_permalink) = $${valueParam}
       )
-    )`, permalink);
-    params.push(permalink, permalink, permalink, permalink);
+    )`);
   }
 
   if (slug) {
-    add(`(
-      LOWER(a.slug) = ?
-      OR LOWER(a.permalink) = $${params.length + 1}
-      OR a.redirects @> jsonb_build_array($${params.length + 2}::text)
-      OR a.previous_permalinks @> jsonb_build_array($${params.length + 3}::text)
+    const valueParam = params.length + 1;
+    params.push(slug);
+    conditions.push(`(
+      LOWER(a.slug) = $${valueParam}
+      OR LOWER(a.permalink) = $${valueParam}
+      OR a.redirects @> jsonb_build_array($${valueParam}::text)
+      OR a.previous_permalinks @> jsonb_build_array($${valueParam}::text)
       OR EXISTS (
         SELECT 1 FROM article_redirects ar
-        WHERE ar.article_id = a.id AND LOWER(ar.old_permalink) = $${params.length + 4}
+        WHERE ar.article_id = a.id AND LOWER(ar.old_permalink) = $${valueParam}
       )
-    )`, slug);
-    params.push(slug, slug, slug, slug);
+    )`);
   }
 
   return { conditions, params };
 }
 
-function buildFeedQuery(query) {
+function buildArticleQuery(query) {
   const { conditions, params } = buildArticleFilters(query);
   let nextParam = params.length + 1;
   const limitProvided = query.limit !== undefined && query.limit !== null && String(query.limit) !== '';
-  const parsedLimit = limitProvided ? parsePositiveInt(query.limit, null) : null;
-  const parsedPage = parsePositiveInt(query.page, 1);
+  const parsedLimit = limitProvided ? Number.parseInt(String(query.limit), 10) : null;
+  const validLimit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
+  const parsedPage = Number.parseInt(String(query.page ?? '1'), 10);
+  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   const pagination = [];
-  if (parsedLimit) {
+  if (validLimit) {
     pagination.push(`LIMIT $${nextParam}`);
-    params.push(parsedLimit);
+    params.push(validLimit);
     nextParam += 1;
     pagination.push(`OFFSET $${nextParam}`);
-    params.push((parsedPage - 1) * parsedLimit);
-    nextParam += 1;
+    params.push((page - 1) * validLimit);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const sql = `
-    SELECT
-      a.id,
-      a.title,
-      a.permalink,
-      a.slug,
-      a.redirects,
-      a.previous_permalinks,
-      a.summary,
-      a.image,
-      a.image_url,
-      a.author,
-      a.date,
-      a.time,
-      a.category,
-      a.location_id,
-      a.language,
-      a.status,
-      a.views,
-      a.shares,
-      a.created_at,
-      a.updated_at
+    SELECT a.*
     FROM articles a
     LEFT JOIN locations l ON l.id = a.location_id
     ${whereClause}
@@ -148,12 +182,17 @@ async function handlePublicArticleList(req, res, next) {
   if (!pool) return next();
 
   try {
-    const { sql, params } = buildFeedQuery(req.query);
+    const { sql, params } = buildArticleQuery(req.query);
     const result = await pool.query(sql, params);
-    const preview = req.path === '/feed';
-    const rows = result.rows.map(articleStore.formatPreviewCard);
+    const isFeed = req.path === '/feed';
+    const articles = result.rows.map(formatArticleRecord);
+
     setPublicCache(res, DEFAULT_FEED_CACHE_SECONDS);
-    return res.status(200).json(preview ? rows : rows.map((article) => ({ ...article })));
+    if (isFeed) {
+      return res.status(200).json(articles.map(articleStore.formatPreviewCard));
+    }
+
+    return res.status(200).json(articles);
   } catch (err) {
     return next(err);
   }
@@ -169,7 +208,7 @@ function publicArticlesPerformance(req, res, next) {
     return handlePublicArticleList(req, res, next);
   }
 
-  // Public single-article reads and preview cards are safe to cache, while redirect maps stay uncached.
+  // Public single-article reads and preview cards are cacheable. Redirect maps remain uncached.
   if (routePath !== '/redirects' && !routePath.startsWith('/redirects/')) {
     setPublicCache(res, DEFAULT_ARTICLE_CACHE_SECONDS);
   }
