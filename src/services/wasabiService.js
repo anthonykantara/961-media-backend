@@ -1,16 +1,21 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const secretsManager = require('./secretsManager');
 
-/**
- * Uploads an optimized file buffer to Wasabi Cloud Storage
- * @param {Buffer} buffer File content
- * @param {string} key Object key inside bucket
- * @param {string} contentType MIME type
- * @returns {Promise<string>} Public or S3 URL of the uploaded object
- */
-async function uploadToWasabi(buffer, key, contentType = 'image/png') {
-  const credentials = await secretsManager.getWasabiCredentials();
+function getMediaPublicUrl(key) {
+  const base = (process.env.MEDIA_CDN_URL || 'https://media.the961.com').replace(/\/+$/, '');
+  return `${base}/${key.replace(/^\/+/, '')}`;
+}
 
+/**
+ * Upload a file to Wasabi.
+ *
+ * Existing callers retain the historical fallback behavior by default.
+ * New callers that persist metadata should pass { throwOnError: true } so a
+ * failed upload can never be recorded as a successfully stored media item.
+ */
+async function uploadToWasabi(buffer, key, contentType = 'image/png', options = {}) {
+  const { throwOnError = false } = options;
+  const credentials = await secretsManager.getWasabiCredentials();
   const isMock = !credentials.accessKeyId || credentials.accessKeyId === 'mock-wasabi-access-key' || process.env.NODE_ENV === 'test';
 
   const s3Client = new S3Client({
@@ -36,15 +41,17 @@ async function uploadToWasabi(buffer, key, contentType = 'image/png') {
       const command = new PutObjectCommand(uploadParams);
       await s3Client.send(command);
     } catch (err) {
+      if (throwOnError) {
+        throw err;
+      }
       console.warn('Wasabi upload warning (using URL fallback):', err.message);
     }
   }
 
-  // Construct standard Wasabi URL
-  const endpointHost = credentials.endpoint.replace(/^https?:\/\//, '');
-  return `https://${endpointHost}/${credentials.bucket}/${key}`;
+  return getMediaPublicUrl(key);
 }
 
 module.exports = {
-  uploadToWasabi
+  uploadToWasabi,
+  getMediaPublicUrl
 };
