@@ -21,12 +21,12 @@ describe('public article query builder', () => {
 
     expect(sql).toContain('LOWER(a.status) = $1');
     expect(sql).toContain('LOWER(a.category) = $2');
-    expect(sql).toContain('LOWER(a.language) = $3');
-    expect(sql).toContain('LOWER(a.location_id) = $4');
-    expect(sql).toContain('LOWER(l.region_id) = $5');
+    expect(sql).toContain('LOWER(a.location_id) = $3');
+    expect(sql).toContain('LOWER(l.region_id) = $4');
+    expect(sql).toContain('LOWER(a.language) = $5');
     expect(sql).toContain('LIMIT $7');
     expect(sql).toContain('OFFSET $8');
-    expect(params).toEqual(['published', 'news', 'en', 'lb', 'levant', 'beirut', 20, 40]);
+    expect(params).toEqual(['published', 'news', 'lb', 'levant', 'en', 'beirut', 20, 40]);
   });
 
   test('supports permalink and slug lookup using a single parameter per filter', () => {
