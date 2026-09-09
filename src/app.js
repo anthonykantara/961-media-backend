@@ -31,12 +31,19 @@ if (process.env.TRUST_PROXY !== undefined && process.env.TRUST_PROXY !== '') {
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(express.json());
 
+const canonicalOrigins = [
+  'https://the961.com',
+  'https://beta.the961.com',
+  'https://cms.the961.com',
+];
+
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    const allowedOrigins = [process.env.WEBSITE_URL, process.env.DASHBOARD_URL].filter(Boolean);
+    const allowedOrigins = [...canonicalOrigins, process.env.WEBSITE_URL, process.env.DASHBOARD_URL]
+      .filter(Boolean);
     if (process.env.ALLOWED_ORIGINS) {
-      allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()));
+      allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean));
     }
     const isDevelopment = process.env.NODE_ENV === 'development';
     const isAllowed = allowedOrigins.includes(origin) ||
