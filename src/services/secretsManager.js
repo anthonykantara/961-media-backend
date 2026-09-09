@@ -26,11 +26,8 @@ async function getSecret(secretName) {
     if (!response.SecretString) return null;
 
     let secretValue;
-    try {
-      secretValue = JSON.parse(response.SecretString);
-    } catch {
-      secretValue = response.SecretString;
-    }
+    try { secretValue = JSON.parse(response.SecretString); }
+    catch { secretValue = response.SecretString; }
     secretCache.set(secretName, secretValue);
     return secretValue;
   } catch (err) {
@@ -40,41 +37,23 @@ async function getSecret(secretName) {
   }
 }
 
-async function getAppSecret() {
-  return getSecret(APP_SECRET_NAME);
-}
+async function getAppSecret() { return getSecret(APP_SECRET_NAME); }
 
 async function getAppSecretField(fieldName, fallback = null) {
   const secret = await getAppSecret();
-  if (secret && typeof secret === 'object' && secret[fieldName] !== undefined && secret[fieldName] !== null) {
-    return secret[fieldName];
-  }
+  if (secret && typeof secret === 'object' && secret[fieldName] !== undefined && secret[fieldName] !== null) return secret[fieldName];
   return fallback;
 }
 
 async function getGeminiApiKey() {
   const bundled = await getAppSecretField('GEMINI_API_KEY');
   if (bundled) return bundled;
-
   const secret = await getSecret(process.env.GEMINI_SECRET_NAME || 'GEMINI_API_KEY');
-  if (typeof secret === 'object' && secret !== null) {
-    return secret.GEMINI_API_KEY || secret.apiKey || secret.api_key || process.env.GEMINI_API_KEY || 'mock-gemini-key';
-  }
+  if (typeof secret === 'object' && secret !== null) return secret.GEMINI_API_KEY || secret.apiKey || secret.api_key || process.env.GEMINI_API_KEY || 'mock-gemini-key';
   return secret || process.env.GEMINI_API_KEY || 'mock-gemini-key';
 }
 
 async function getWasabiCredentials() {
-  const bundled = await getAppSecret();
-  if (bundled && typeof bundled === 'object' && (bundled.WASABI_ACCESS_KEY_ID || bundled.WASABI_SECRET_ACCESS_KEY)) {
-    return {
-      accessKeyId: bundled.WASABI_ACCESS_KEY_ID || bundled.accessKeyId || process.env.WASABI_ACCESS_KEY_ID,
-      secretAccessKey: bundled.WASABI_SECRET_ACCESS_KEY || bundled.secretAccessKey || process.env.WASABI_SECRET_ACCESS_KEY,
-      bucket: bundled.WASABI_BUCKET || bundled.bucket || process.env.WASABI_BUCKET || 'content-pipeline-assets',
-      region: bundled.WASABI_REGION || bundled.region || process.env.WASABI_REGION || 'us-east-1',
-      endpoint: bundled.WASABI_ENDPOINT || bundled.endpoint || process.env.WASABI_ENDPOINT || 'https://s3.wasabisys.com'
-    };
-  }
-
   const secret = await getSecret(process.env.WASABI_SECRET_NAME || 'WASABI_CREDENTIALS');
   if (typeof secret === 'object' && secret !== null) {
     return {
@@ -85,7 +64,6 @@ async function getWasabiCredentials() {
       endpoint: secret.WASABI_ENDPOINT || secret.endpoint || process.env.WASABI_ENDPOINT || 'https://s3.wasabisys.com'
     };
   }
-
   return {
     accessKeyId: process.env.WASABI_ACCESS_KEY_ID || 'mock-wasabi-access-key',
     secretAccessKey: process.env.WASABI_SECRET_ACCESS_KEY || 'mock-wasabi-secret-key',
@@ -106,7 +84,6 @@ async function getMediaWasabiCredentials() {
       endpoint: bundled.WASABI_ENDPOINT || bundled.endpoint || process.env.WASABI_MEDIA_ENDPOINT || 'https://s3.eu-south-1.wasabisys.com'
     };
   }
-
   const secret = await getSecret(process.env.WASABI_MEDIA_SECRET_NAME || 'WASABI_MEDIA_CREDENTIALS');
   if (typeof secret === 'object' && secret !== null) {
     return {
@@ -117,7 +94,6 @@ async function getMediaWasabiCredentials() {
       endpoint: secret.WASABI_ENDPOINT || secret.endpoint || process.env.WASABI_MEDIA_ENDPOINT || 'https://s3.eu-south-1.wasabisys.com'
     };
   }
-
   return {
     accessKeyId: process.env.WASABI_MEDIA_ACCESS_KEY_ID || 'mock-wasabi-access-key',
     secretAccessKey: process.env.WASABI_MEDIA_SECRET_ACCESS_KEY || 'mock-wasabi-secret-key',
@@ -130,23 +106,9 @@ async function getMediaWasabiCredentials() {
 async function getPublishingCredentials() {
   const secret = await getSecret(process.env.PUBLISH_SECRET_NAME || 'PUBLISH_CREDENTIALS');
   if (typeof secret === 'object' && secret !== null) return secret;
-  return {
-    socialApiKey: process.env.SOCIAL_API_KEY || 'mock-social-api-key',
-    renderApiKey: process.env.RENDER_API_KEY || 'mock-render-api-key'
-  };
+  return { socialApiKey: process.env.SOCIAL_API_KEY || 'mock-social-api-key', renderApiKey: process.env.RENDER_API_KEY || 'mock-render-api-key' };
 }
 
-function clearCache() {
-  secretCache.clear();
-}
+function clearCache() { secretCache.clear(); }
 
-module.exports = {
-  getSecret,
-  getAppSecret,
-  getAppSecretField,
-  getGeminiApiKey,
-  getWasabiCredentials,
-  getMediaWasabiCredentials,
-  getPublishingCredentials,
-  clearCache
-};
+module.exports = { getSecret, getAppSecret, getAppSecretField, getGeminiApiKey, getWasabiCredentials, getMediaWasabiCredentials, getPublishingCredentials, clearCache };
