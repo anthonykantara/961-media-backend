@@ -7,10 +7,14 @@ function getMediaPublicUrl(key) {
 }
 
 /**
- * Upload a file to Wasabi and return the canonical public media URL.
- * The storage provider remains hidden behind MEDIA_CDN_URL.
+ * Upload a file to Wasabi.
+ *
+ * Existing callers retain the historical fallback behavior by default.
+ * New callers that persist metadata should pass { throwOnError: true } so a
+ * failed upload can never be recorded as a successfully stored media item.
  */
-async function uploadToWasabi(buffer, key, contentType = 'image/png') {
+async function uploadToWasabi(buffer, key, contentType = 'image/png', options = {}) {
+  const { throwOnError = false } = options;
   const credentials = await secretsManager.getWasabiCredentials();
   const isMock = !credentials.accessKeyId || credentials.accessKeyId === 'mock-wasabi-access-key' || process.env.NODE_ENV === 'test';
 
@@ -33,8 +37,15 @@ async function uploadToWasabi(buffer, key, contentType = 'image/png') {
   };
 
   if (!isMock) {
-    const command = new PutObjectCommand(uploadParams);
-    await s3Client.send(command);
+    try {
+      const command = new PutObjectCommand(uploadParams);
+      await s3Client.send(command);
+    } catch (err) {
+      if (throwOnError) {
+        throw err;
+      }
+      console.warn('Wasabi upload warning (using URL fallback):', err.message);
+    }
   }
 
   return getMediaPublicUrl(key);
