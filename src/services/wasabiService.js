@@ -1,16 +1,17 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const secretsManager = require('./secretsManager');
 
+function getMediaPublicUrl(key) {
+  const base = (process.env.MEDIA_CDN_URL || 'https://media.the961.com').replace(/\/+$/, '');
+  return `${base}/${key.replace(/^\/+/, '')}`;
+}
+
 /**
- * Uploads an optimized file buffer to Wasabi Cloud Storage
- * @param {Buffer} buffer File content
- * @param {string} key Object key inside bucket
- * @param {string} contentType MIME type
- * @returns {Promise<string>} Public or S3 URL of the uploaded object
+ * Upload a file to Wasabi and return the canonical public media URL.
+ * The storage provider remains hidden behind MEDIA_CDN_URL.
  */
 async function uploadToWasabi(buffer, key, contentType = 'image/png') {
   const credentials = await secretsManager.getWasabiCredentials();
-
   const isMock = !credentials.accessKeyId || credentials.accessKeyId === 'mock-wasabi-access-key' || process.env.NODE_ENV === 'test';
 
   const s3Client = new S3Client({
@@ -32,19 +33,14 @@ async function uploadToWasabi(buffer, key, contentType = 'image/png') {
   };
 
   if (!isMock) {
-    try {
-      const command = new PutObjectCommand(uploadParams);
-      await s3Client.send(command);
-    } catch (err) {
-      console.warn('Wasabi upload warning (using URL fallback):', err.message);
-    }
+    const command = new PutObjectCommand(uploadParams);
+    await s3Client.send(command);
   }
 
-  // Construct standard Wasabi URL
-  const endpointHost = credentials.endpoint.replace(/^https?:\/\//, '');
-  return `https://${endpointHost}/${credentials.bucket}/${key}`;
+  return getMediaPublicUrl(key);
 }
 
 module.exports = {
-  uploadToWasabi
+  uploadToWasabi,
+  getMediaPublicUrl
 };
