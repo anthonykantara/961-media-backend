@@ -1,0 +1,24 @@
+[Unit]
+Description=961 Media Backend API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=961media
+Group=961media
+WorkingDirectory=/opt/961-media-backend
+EnvironmentFile=/etc/961-media-backend.env
+ExecStart=/usr/bin/node --require ./src/services/imageRuntime.js src/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/961-media-backend
+
+[Install]
+WantedBy=multi-user.target
