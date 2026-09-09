@@ -19,7 +19,7 @@ Node/Express :5000
    |
    +--> PostgreSQL (same instance, localhost only)
    +--> AWS Secrets Manager: 961-MEDIA-BACKEND
-   +--> Wasabi: the961-media / media.961.co
+   +--> Wasabi: the961-media / media.the961.com
 ```
 
 Use a 2 GB / 2 vCPU Lightsail Linux instance as the starting size. Do not expose PostgreSQL to the internet. Keep media in Wasabi.
@@ -139,7 +139,7 @@ PGUSER=media_app
 PGPASSWORD=<strong-random-password>
 WEBSITE_URL=https://the961.com
 DASHBOARD_URL=https://cms.the961.com
-MEDIA_CDN_URL=https://media.961.co
+MEDIA_CDN_URL=https://media.the961.com
 ```
 
 For the Lightsail deployment, add the dedicated IAM access key credentials to this file only if the instance cannot use another temporary-credential mechanism:
