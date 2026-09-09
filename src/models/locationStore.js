@@ -1,48 +1,5 @@
 const db = require('../db');
 
-const DEFAULT_SEED_LOCATIONS = [
-  {
-    id: 'lb',
-    name: 'Lebanon',
-    country: 'Lebanon',
-    countryCode: 'LB',
-    regionId: 'levant',
-    regionName: 'Levant',
-    timezone: 'Asia/Beirut',
-    enabled: true
-  },
-  {
-    id: 'sa-riyadh',
-    name: 'Riyadh',
-    country: 'Saudi Arabia',
-    countryCode: 'SA',
-    regionId: 'gcc',
-    regionName: 'GCC',
-    timezone: 'Asia/Riyadh',
-    enabled: true
-  },
-  {
-    id: 'ae-dubai',
-    name: 'Dubai',
-    country: 'United Arab Emirates',
-    countryCode: 'AE',
-    regionId: 'gcc',
-    regionName: 'GCC',
-    timezone: 'Asia/Dubai',
-    enabled: true
-  },
-  {
-    id: 'eg-cairo',
-    name: 'Cairo',
-    country: 'Egypt',
-    countryCode: 'EG',
-    regionId: 'north-africa',
-    regionName: 'North Africa',
-    timezone: 'Africa/Cairo',
-    enabled: true
-  }
-];
-
 let memoryLocations = [];
 
 function formatLocationRecord(row) {
@@ -60,29 +17,9 @@ function formatLocationRecord(row) {
 }
 
 async function ensureInitialized() {
-  const pool = db.getPool();
-  if (pool) {
-    try {
-      const res = await pool.query('SELECT COUNT(*) FROM locations;');
-      if (res && res.rows && parseInt(res.rows[0].count, 10) === 0) {
-        for (const loc of DEFAULT_SEED_LOCATIONS) {
-          await pool.query(
-            `INSERT INTO locations (id, name, country, country_code, region_id, region_name, timezone, enabled)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (id) DO NOTHING;`,
-            [loc.id, loc.name, loc.country, loc.countryCode, loc.regionId, loc.regionName, loc.timezone, loc.enabled]
-          );
-        }
-      }
-      return;
-    } catch (err) {
-      // Fallback
-    }
-  }
-
-  if (memoryLocations.length === 0) {
-    memoryLocations = DEFAULT_SEED_LOCATIONS.map(l => ({ ...l }));
-  }
+  // The CMS must remain empty when the database is empty.
+  // Do not seed demo or default locations here.
+  return;
 }
 
 async function getAllLocations() {
@@ -124,14 +61,10 @@ async function getLocationById(id) {
 
 async function createLocation(locationData) {
   const id = String(locationData.id || '').trim().toLowerCase();
-  if (!id) {
-    throw new Error('Location ID is required.');
-  }
+  if (!id) throw new Error('Location ID is required.');
 
   const existing = await getLocationById(id);
-  if (existing) {
-    throw new Error(`Location with ID '${id}' already exists.`);
-  }
+  if (existing) throw new Error(`Location with ID '${id}' already exists.`);
 
   const newLocation = {
     id,
@@ -162,9 +95,7 @@ async function createLocation(locationData) {
         newLocation.timezone,
         newLocation.enabled
       ]);
-      if (res && res.rows && res.rows[0]) {
-        return formatLocationRecord(res.rows[0]);
-      }
+      if (res && res.rows && res.rows[0]) return formatLocationRecord(res.rows[0]);
     } catch (err) {
       console.error('Database createLocation error, using fallback:', err.message);
     }
@@ -177,10 +108,7 @@ async function createLocation(locationData) {
 async function updateLocation(id, updateData) {
   const normalizedId = String(id).trim().toLowerCase();
   const existing = await getLocationById(normalizedId);
-
-  if (!existing) {
-    return null;
-  }
+  if (!existing) return null;
 
   const updatedName = typeof updateData.name === 'string' ? updateData.name : existing.name;
   const updatedCountry = typeof updateData.country === 'string' ? updateData.country : existing.country;
@@ -210,29 +138,26 @@ async function updateLocation(id, updateData) {
         updatedEnabled,
         normalizedId
       ]);
-      if (res && res.rows && res.rows[0]) {
-        return formatLocationRecord(res.rows[0]);
-      }
+      if (res && res.rows && res.rows[0]) return formatLocationRecord(res.rows[0]);
     } catch (err) {
       console.error('Database updateLocation error, using fallback:', err.message);
     }
   }
 
   const index = memoryLocations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
-  if (index !== -1) {
-    memoryLocations[index] = {
-      ...memoryLocations[index],
-      name: updatedName,
-      country: updatedCountry,
-      countryCode: updatedCountryCode,
-      regionId: updatedRegionId,
-      regionName: updatedRegionName,
-      timezone: updatedTimezone,
-      enabled: updatedEnabled
-    };
-    return formatLocationRecord(memoryLocations[index]);
-  }
-  return null;
+  if (index === -1) return null;
+
+  memoryLocations[index] = {
+    ...memoryLocations[index],
+    name: updatedName,
+    country: updatedCountry,
+    countryCode: updatedCountryCode,
+    regionId: updatedRegionId,
+    regionName: updatedRegionName,
+    timezone: updatedTimezone,
+    enabled: updatedEnabled
+  };
+  return formatLocationRecord(memoryLocations[index]);
 }
 
 async function deleteLocation(id) {
@@ -241,19 +166,14 @@ async function deleteLocation(id) {
   if (pool) {
     try {
       const res = await pool.query('DELETE FROM locations WHERE LOWER(id) = $1 RETURNING id;', [normalizedId]);
-      if (res && res.rows && res.rows.length > 0) {
-        return true;
-      }
-      return false;
+      return Boolean(res && res.rows && res.rows.length > 0);
     } catch (err) {
       console.error('Database deleteLocation error, using fallback:', err.message);
     }
   }
 
   const index = memoryLocations.findIndex(l => l.id && l.id.toLowerCase() === normalizedId);
-  if (index === -1) {
-    return false;
-  }
+  if (index === -1) return false;
   memoryLocations.splice(index, 1);
   return true;
 }
@@ -289,7 +209,6 @@ async function getArticlesByRegion(articles, regionId) {
   if (!regionId || !Array.isArray(articles)) return articles;
   const regionLocations = await getLocationsByRegion(regionId);
   const locationIds = new Set(regionLocations.map(l => (l.id || '').toLowerCase()));
-
   return articles.filter(a => a.locationId && locationIds.has(a.locationId.toLowerCase()));
 }
 
@@ -299,21 +218,13 @@ async function clearStore(useSeed = false) {
     try {
       await pool.query('TRUNCATE TABLE locations;');
       if (useSeed) {
-        for (const loc of DEFAULT_SEED_LOCATIONS) {
-          await pool.query(
-            `INSERT INTO locations (id, name, country, country_code, region_id, region_name, timezone, enabled)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (id) DO NOTHING;`,
-            [loc.id, loc.name, loc.country, loc.countryCode, loc.regionId, loc.regionName, loc.timezone, loc.enabled]
-          );
-        }
+        console.warn('clearStore(useSeed=true) ignored: seeded locations are disabled.');
       }
     } catch (err) {
       console.error('Database clearStore error, using fallback:', err.message);
     }
   }
-
-  memoryLocations = useSeed ? DEFAULT_SEED_LOCATIONS.map(l => ({ ...l })) : [];
+  memoryLocations = [];
 }
 
 module.exports = {
