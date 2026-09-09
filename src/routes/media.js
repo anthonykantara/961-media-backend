@@ -82,7 +82,11 @@ router.post('/upload', authenticateJwt, auditLogger, requireRole('Contributor'),
       req.file.buffer,
       storageKey,
       req.file.mimetype,
-      { throwOnError: true }
+      {
+        throwOnError: true,
+        profile: 'media',
+        publicRead: false
+      }
     );
 
     const media = await mediaStore.createMedia({
