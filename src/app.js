@@ -11,6 +11,7 @@ const locationsRouter = require('./routes/locations');
 const regionsRouter = require('./routes/regions');
 const expressCreationRouter = require('./routes/expressCreation');
 const adsRouter = require('./routes/ads');
+const { publicArticlesPerformance } = require('./middleware/publicArticlesPerformance');
 
 // Load environment variables
 dotenv.config();
@@ -148,6 +149,11 @@ app.use('/api/pipeline', pipelineRateLimiter);
 app.use('/api/express-creation', pipelineRateLimiter);
 app.use('/api/articles/express-creation', pipelineRateLimiter);
 app.use('/api', publicRateLimiter);
+
+// Optimize public article reads before the general article router.
+// The optimizer preserves the existing API response shapes while pushing filtering,
+// search, ordering, and pagination into PostgreSQL and adding CDN-friendly caching headers.
+app.use('/api/articles', publicArticlesPerformance);
 
 // Register routes
 app.use('/api/articles/express-creation', expressCreationRouter);

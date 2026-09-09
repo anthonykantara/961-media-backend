@@ -45,19 +45,23 @@ async function checkScheduledArticles() {
  * Claims and processes all currently ready tasks in background queue.
  * Executes tasks concurrently and updates their status in queueStore.
  * 
+ * @param {object} options Processing options.
+ * @param {boolean} options.checkScheduled Whether to scan scheduled articles before claiming tasks.
  * @returns {Promise<Array<object>>} List of processed task results.
  */
-async function processNextTasks() {
+async function processNextTasks({ checkScheduled = true } = {}) {
   try {
     await queueStore.recoverStaleLocks();
   } catch (err) {
     console.error('Error recovering stale locks:', err.message);
   }
 
-  try {
-    await checkScheduledArticles();
-  } catch (err) {
-    console.error('Error checking scheduled articles:', err.message);
+  if (checkScheduled) {
+    try {
+      await checkScheduledArticles();
+    } catch (err) {
+      console.error('Error checking scheduled articles:', err.message);
+    }
   }
 
   const tasks = await queueStore.claimPendingTasks(10);
@@ -131,10 +135,11 @@ async function processNextTasks() {
 
 /**
  * Immediately triggers background queue processing.
+ * This is used by publish/dispatch endpoints, so new articles do not wait for the polling interval.
  */
 function triggerImmediateProcessing() {
   setImmediate(() => {
-    processNextTasks().catch(err => {
+    processNextTasks({ checkScheduled: false }).catch(err => {
       console.error('Error in immediate queue processing:', err.message);
     });
   });
@@ -143,12 +148,12 @@ function triggerImmediateProcessing() {
 /**
  * Starts periodic background queue processing worker loop.
  * 
- * @param {number} [intervalMs=1000] Interval in milliseconds between polling checks.
+ * @param {number} [intervalMs=10000] Interval in milliseconds between polling checks.
  */
-function startQueueWorker(intervalMs = 1000) {
+function startQueueWorker(intervalMs = 10 * 1000) {
   if (!workerTimer) {
     workerTimer = setInterval(() => {
-      processNextTasks().catch(err => {
+      processNextTasks({ checkScheduled: true }).catch(err => {
         console.error('Error in periodic queue processing:', err.message);
       });
     }, intervalMs);
