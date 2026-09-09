@@ -2,7 +2,7 @@ const db = require('../db');
 const articleStore = require('../models/articleStore');
 
 const DEFAULT_FEED_CACHE_SECONDS = 60;
-const DEFAULT_ARTICLE_CACHE_SECONDS = 300;
+const DEFAULT_ARTICLE_CACHE_SECONDS = 120;
 const DEFAULT_STALE_WHILE_REVALIDATE_SECONDS = 30;
 
 function setPublicCache(res, maxAgeSeconds, staleWhileRevalidateSeconds = DEFAULT_STALE_WHILE_REVALIDATE_SECONDS) {
@@ -146,13 +146,18 @@ function buildArticleFilters(query) {
   return { conditions, params };
 }
 
-function buildArticleQuery(query) {
-  const { conditions, params } = buildArticleFilters(query);
+function buildArticleQuery(query, defaultStatus = null) {
+  const normalizedQuery = { ...query };
+  if (defaultStatus && !normalizedQuery.status) {
+    normalizedQuery.status = defaultStatus;
+  }
+
+  const { conditions, params } = buildArticleFilters(normalizedQuery);
   let nextParam = params.length + 1;
-  const limitProvided = query.limit !== undefined && query.limit !== null && String(query.limit) !== '';
-  const parsedLimit = limitProvided ? Number.parseInt(String(query.limit), 10) : null;
+  const limitProvided = normalizedQuery.limit !== undefined && normalizedQuery.limit !== null && String(normalizedQuery.limit) !== '';
+  const parsedLimit = limitProvided ? Number.parseInt(String(normalizedQuery.limit), 10) : null;
   const validLimit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
-  const parsedPage = Number.parseInt(String(query.page ?? '1'), 10);
+  const parsedPage = Number.parseInt(String(normalizedQuery.page ?? '1'), 10);
   const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   const pagination = [];
@@ -182,9 +187,9 @@ async function handlePublicArticleList(req, res, next) {
   if (!pool) return next();
 
   try {
-    const { sql, params } = buildArticleQuery(req.query);
-    const result = await pool.query(sql, params);
     const isFeed = req.path === '/feed';
+    const { sql, params } = buildArticleQuery(req.query, isFeed ? 'published' : null);
+    const result = await pool.query(sql, params);
     const articles = result.rows.map(formatArticleRecord);
 
     setPublicCache(res, DEFAULT_FEED_CACHE_SECONDS);
