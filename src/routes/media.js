@@ -26,8 +26,6 @@ const upload = multer({
   }
 });
 
-const MEDIA_CDN_BASE = (process.env.MEDIA_CDN_URL || 'https://media.the961.com').replace(/\/+$/, '');
-
 function sanitizeFilename(name) {
   const ext = path.extname(name || '').toLowerCase();
   const stem = path.basename(name || 'upload', ext)
@@ -80,7 +78,12 @@ router.post('/upload', authenticateJwt, auditLogger, requireRole('Contributor'),
     const uniquePrefix = crypto.randomUUID();
     const storageKey = `media/${new Date().getUTCFullYear()}/${String(new Date().getUTCMonth() + 1).padStart(2, '0')}/${uniquePrefix}-${safeName}`;
 
-    await wasabiService.uploadToWasabi(req.file.buffer, storageKey, req.file.mimetype);
+    const publicUrl = await wasabiService.uploadToWasabi(
+      req.file.buffer,
+      storageKey,
+      req.file.mimetype,
+      { throwOnError: true }
+    );
 
     const media = await mediaStore.createMedia({
       name: originalName,
@@ -88,7 +91,7 @@ router.post('/upload', authenticateJwt, auditLogger, requireRole('Contributor'),
       mimeType: req.file.mimetype,
       size: req.file.size,
       storageKey,
-      url: `${MEDIA_CDN_BASE}/${storageKey}`,
+      url: publicUrl,
       parentId: req.body.parentId || null,
       altText: req.body.altText || '',
       caption: req.body.caption || '',
