@@ -8,7 +8,7 @@ This is the low-cost production deployment for the 961 Media backend.
 Cloudflare
    |
    v
-media-api.961.co
+api.the961.com
    |
    v
 Lightsail Ubuntu instance
@@ -189,9 +189,9 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-The checked-in config uses `media-api.961.co` and proxies to `127.0.0.1:5000`.
+The checked-in config uses `api.the961.com` and proxies to `127.0.0.1:5000`.
 
-Before enabling Cloudflare proxying, point `media-api.961.co` to the Lightsail static IPv4 address. For production TLS, install a Cloudflare Origin Certificate on the instance and change the Nginx site to listen on `443 ssl`; then use Cloudflare SSL mode `Full (strict)`.
+Before enabling Cloudflare proxying, point `api.the961.com` to the Lightsail static IPv4 address. For production TLS, install a Cloudflare Origin Certificate on the instance and change the Nginx site to listen on `443 ssl`; then use Cloudflare SSL mode `Full (strict)`.
 
 ## 8. Configure Cloudflare
 
@@ -199,7 +199,7 @@ Create the DNS record:
 
 ```text
 Type: A
-Name: media-api
+Name: api
 Target: <Lightsail static IPv4>
 Proxy: Proxied
 ```
@@ -209,7 +209,7 @@ Cloudflare should be the public edge. Do not use `api.961.co`, which belongs to 
 After the API hostname is live, set the Media web and CMS build variable to:
 
 ```text
-VITE_API_URL=https://media-api.961.co
+VITE_API_URL=https://api.the961.com
 ```
 
 Do not put AWS, Wasabi, Gemini, JWT, OTP, or database secrets in Cloudflare frontend environment variables.
@@ -273,7 +273,7 @@ sudo systemctl restart 961-media-backend
 sudo systemctl status 961-media-backend --no-pager
 ```
 
-Validate the public API through `https://media-api.961.co` before changing frontend builds.
+Validate the public API through `https://api.the961.com` before changing frontend builds.
 
 ## 11. Scale only when needed
 
