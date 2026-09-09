@@ -1,4 +1,8 @@
+const dotenv = require('dotenv');
 const sharp = require('sharp');
+
+// Load environment values before initializing Sharp because this module may be preloaded by Node.
+dotenv.config();
 
 // Keep Sharp's internal caches bounded on the small production instance.
 const memoryMb = Number.parseInt(process.env.SHARP_CACHE_MEMORY_MB || '64', 10);
