@@ -1,0 +1,14 @@
+const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { requestOtp, verifyOtp } = require('../services/otpAuthService');
+const { setSessionCookie, clearSessionCookie } = require('../utils/authCookie');
+const { authenticateJwt } = require('../middleware/auth');
+const { query } = require('../db');
+const router = express.Router();
+const otpRequestLimiter = rateLimit({windowMs:15*60*1000,max:5,standardHeaders:true,legacyHeaders:false,message:{error:'Too Many Requests',message:'Too many login attempts. Please try again later.'}});
+const otpVerifyLimiter = rateLimit({windowMs:15*60*1000,max:10,standardHeaders:true,legacyHeaders:false,message:{error:'Too Many Requests',message:'Too many verification attempts. Please try again later.'}});
+router.post('/request-otp',otpRequestLimiter,async(req,res,next)=>{try{const result=await requestOtp(req.body&&req.body.email);res.json({success:true,...result});}catch(err){next(err);}});
+router.post('/verify-otp',otpVerifyLimiter,async(req,res,next)=>{try{const result=await verifyOtp(req.body&&req.body.email,req.body&&req.body.code);setSessionCookie(res,result.token);res.json({success:true,user:result.user});}catch(err){next(err);}});
+router.get('/me',authenticateJwt,async(req,res,next)=>{try{const result=await query('SELECT id, email, role, display_name AS "displayName", is_active AS "isActive" FROM users WHERE id = $1 LIMIT 1',[req.user.id]);const user=result&&result.rows[0];if(!user||!user.isActive)return res.status(401).json({error:'Unauthorized',message:'User account is inactive'});res.json({user});}catch(err){next(err);}});
+router.post('/logout',(req,res)=>{clearSessionCookie(res);res.json({success:true});});
+module.exports=router;
