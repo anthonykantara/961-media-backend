@@ -4,6 +4,7 @@ const articleStore = require('../models/articleStore');
 const DEFAULT_FEED_CACHE_SECONDS = 60;
 const DEFAULT_ARTICLE_CACHE_SECONDS = 120;
 const DEFAULT_STALE_WHILE_REVALIDATE_SECONDS = 30;
+const RESERVED_ARTICLE_PATHS = new Set(['/express-creation']);
 
 function setPublicCache(res, maxAgeSeconds, staleWhileRevalidateSeconds = DEFAULT_STALE_WHILE_REVALIDATE_SECONDS) {
   res.set(
@@ -213,8 +214,12 @@ function publicArticlesPerformance(req, res, next) {
     return handlePublicArticleList(req, res, next);
   }
 
-  // Public single-article reads and preview cards are cacheable. Redirect maps remain uncached.
-  if (routePath !== '/redirects' && !routePath.startsWith('/redirects/')) {
+  // Public single-article reads and preview cards are cacheable. Redirect maps and mutation-adjacent routes remain uncached.
+  const segments = routePath.split('/').filter(Boolean);
+  const isSingleArticleRead = (segments.length === 1 || (segments.length === 2 && segments[1] === 'preview'))
+    && !RESERVED_ARTICLE_PATHS.has(routePath);
+
+  if (isSingleArticleRead && !routePath.startsWith('/redirects/')) {
     setPublicCache(res, DEFAULT_ARTICLE_CACHE_SECONDS);
   }
 
@@ -223,5 +228,6 @@ function publicArticlesPerformance(req, res, next) {
 
 module.exports = {
   publicArticlesPerformance,
-  setPublicCache
+  setPublicCache,
+  buildArticleQuery
 };
